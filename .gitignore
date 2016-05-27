@@ -1,0 +1,8 @@
+*.pdf
+*/main
+ARPS/*
+FGBG_OPTFLOW/input/*
+*.jpg
+*.zip
+*.png
+*/CMake*
