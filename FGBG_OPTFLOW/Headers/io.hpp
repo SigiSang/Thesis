@@ -19,10 +19,11 @@ namespace io {
 	string dirOutput = "output/";
 
 	/** Shown image properties and helper values **/
-	int imX=50,imY=50
+	int imX=5,imY=5
 		,shownImages=0
 		,consecutiveImages=4
-		,normalSize=325;
+		,normalXSize=320
+		,normalYSize=260;
 
 	map<string,vector<int> > imgPos;
 
@@ -30,7 +31,8 @@ namespace io {
 	    int windowFlag, xSize, ySize, margin=3;
 	    if(resize){
 	        windowFlag = WINDOW_NORMAL;
-	        xSize = ySize = normalSize;
+	        xSize = normalXSize;
+	        ySize = normalYSize;
 	    } else {
 	        windowFlag = WINDOW_AUTOSIZE;
 	        xSize = img.cols;
@@ -47,7 +49,7 @@ namespace io {
 	    }
 	    imX += xSize+margin;
 	    if(++shownImages%consecutiveImages == 0){
-	    	imX = 50;
+	    	imX = 5;
 	    	imY += ySize+margin;
 	    }
 	}

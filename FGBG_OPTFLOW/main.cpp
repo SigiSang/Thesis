@@ -177,6 +177,10 @@ void similarNeighbourWeights(const Mat& src, const Mat& data, Mat& weights){
 	for(int x=0;x<src.cols;x++){
 	for(int y=0;y<src.rows;y++){
 		short neighbours = 0;
+		// TODO
+		/* Aanpassen naar deltaX en deltaY, als deze gelijk zijn is dat correcter dan hoek&&grootte.
+		*  Zal nu wss exactere maatstaf zijn, intervallen rond delta's kan nuttig zijn
+		*/
 		int angle = data.at<DataVec>(y,x)[1];
 		int size = data.at<DataVec>(y,x)[2];
 		if(angle > 0 && size > 0){
@@ -196,6 +200,7 @@ void similarNeighbourWeights(const Mat& src, const Mat& data, Mat& weights){
 			}
 			}
 		}
+		// TODO weight veranderen naar float
 		unsigned char weight = (1<<neighbours)-1;
 		// unsigned char weight = neighbours*32;
 		// if(neighbours!=0) weight--;
@@ -218,6 +223,7 @@ void regularization(const Mat& src, Mat& dst, Mat& data, vector<uchar>& status, 
 			if(size>=500) continue;
 			if(angle<0) angle += 360;
 			data.at<DataVec>(y1,x1)[0] = ptsIdx;
+			// TODO veranderen naar deltaX en deltaY
 			data.at<DataVec>(y1,x1)[1] = (unsigned short)angle;
 			data.at<DataVec>(y1,x1)[2] = (unsigned short)size;
     	}
@@ -257,6 +263,7 @@ void expandRegions(const Mat& src, const Mat& mask, const Mat& data, Mat& regulD
    	vector<bool> expanded(width*height,false);
     for(int x=0;x<width;x++){
     for(int y=0;y<height;y++){
+    	// TODO Change to threshold value variable
     	if((int)(weights.at<unsigned char>(y,x))>127){
     		int idx = y*width+x;
 	    	if(!expanded[idx]){
@@ -272,7 +279,24 @@ void expandRegions(const Mat& src, const Mat& mask, const Mat& data, Mat& regulD
     }
 }
 
-void motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motionCompMask, Mat& motionMask, Ptr<BackgroundSubtractor> pMOG2, string name, bool showSrc=true, bool useForegroundFeatures=true){
+void morphologicalReconstruction(const Mat& mask, Mat& dst, Mat& weights){
+    // TODO Change to threshold value variable
+   	Mat dilation,maskedDilation,prevMaskedDilation;
+   	bool hasChanged;
+   	int strucSize = 5;
+	Mat struc = getStructuringElement(MORPH_ELLIPSE,Size(strucSize,strucSize));
+   	threshold(weights,maskedDilation,(1<<4)-1);
+   	do{
+   		maskedDilation.copyTo(prevMaskedDilation);
+   		dilate(prevMaskedDilation,dilation,struc);
+   		min(dilation,mask,maskedDilation);
+   		// equal = (sum(maskedDilation!=dilation) == Scalar(0,0,0,0));
+   		hasChanged = (countNonZero(maskedDilation!=prevMaskedDilation) != 0);
+   	}while(hasChanged);
+   	maskedDilation.copyTo(dst);
+}
+
+void motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motionCompMask, Mat& motionMask, Ptr<BackgroundSubtractor> pMOG2, string name, bool showSrc=true, bool useForegroundFeatures=true, bool useMorphRec=true){
 	bool secondIter = false;
 
 	vector<uchar> status;
@@ -286,24 +310,39 @@ void motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motionCompMask, Mat& motionMas
 	getOptFlowFeatures(motionCompMask,fgMask,combMask,prvPts,useForegroundFeatures);
 	opticalFlow(prvFr,nxtFr,optFlow1,status,prvPts,nxtPts,fgMask);
 	regularization(prvFr,motionMask,data,status,prvPts,nxtPts,weights);
-   	expandRegions(prvFr,fgMask,data,regulData,motionMask);
-   	// postProcessing(motionMask1,motionMask1,3,MORPH_CLOSE);
-   	// addWeighted(prvFr,1,motionMask1,0.5,0,motionMask1);
+   	// if(useMorphRec){
+   	// 	morphologicalReconstruction(fgMask,motionMask,motionMask);
+   	// }else{
+   	// 	expandRegions(prvFr,fgMask,data,regulData,motionMask);
+   	// }
 
- //   	if(secondIter){
-	//    	status.clear();prvPts.clear();nxtPts.clear();
-	//    	binMat2Vec(motionMask,prvPts);
-	// 	opticalFlow(prvFr,nxtFr,optFlow2,status,prvPts,nxtPts,fgMask);
-	// 	regularization(prvFr,motionMask,data,status,prvPts,nxtPts);
+   	// Morphological reconstruction
+   	morphologicalReconstruction(fgMask,motionMask,motionMask);
+
+   	// Morph + Exp
+ //   	uchar threshold = 127;
+ //   	Mat motMaskMorph,motMaskExp;
+ //   	morphologicalReconstruction(fgMask,motMaskMorph,motionMask);
+ //   	motionMask.copyTo(motMaskExp);
+ //   	expandRegions(prvFr,fgMask,data,regulData,motMaskExp);
+ //   	for(int x=0;x<motMaskMorph.cols;x++){
+ //   	for(int y=0;y<motMaskMorph.rows;y++){
+ //   		if(motMaskMorph.at<uchar>(y,x) > threshold
+ //   			|| motMaskExp.at<uchar>(y,x) > threshold){
+ //   			motionMask.at<uchar>(y,x) = -1;
+ //   		}
 	// }
+ //   	}
 
 	bool resize = true;
 	if(showSrc) io::showImage(name+" Src",nxtFr,resize);
 	// io::showImage(name+" Smoothing",smoothing,resize);
 	io::showImage(name+" Foreground Mask",fgMask,resize);
 	// io::showImage(name+" Comb Mask",combMask,resize);
-	io::showImage(name+" OptFlow1",optFlow1,resize);
+	// io::showImage(name+" OptFlow1",optFlow1,resize);
 	io::showImage(name+" Weights",weights,resize);
+	io::showImage(name+" Morph Rec",motMaskMorph,resize);
+	io::showImage(name+" Expansion",motMaskExp,resize);
 	if(secondIter) io::showImage(name+" OptFlow2",optFlow2,resize);
 	io::showImage(name+" MotionMask",motionMask,resize);
 }
@@ -330,6 +369,8 @@ int main (int argc, char** argv){
 		cvtColor(prvFr,prvFr,CV_BGR2GRAY);
 		Ptr<BackgroundSubtractor> pMOG2 = createBackgroundSubtractorMOG2(history,varThreshold,detectShadows);
 		Ptr<BackgroundSubtractor> pMOG2Noisy = createBackgroundSubtractorMOG2(history,varThreshold,detectShadows);
+		// Ptr<BackgroundSubtractor> pMOG2Exp = createBackgroundSubtractorMOG2(history,varThreshold,detectShadows);
+		// Ptr<BackgroundSubtractor> pMOG2NoisyExp = createBackgroundSubtractorMOG2(history,varThreshold,detectShadows);
 		motionCompMask = Mat::zeros(prvFr.size(),CV_8UC1);
 		motionCompMaskNoisy = Mat::zeros(prvFr.size(),CV_8UC1);
 		while(cap.read(nxtFr)){
@@ -338,8 +379,10 @@ int main (int argc, char** argv){
 			addNoise(prvFr,prvFrNoisy);
 			addNoise(nxtFr,nxtFrNoisy);
 
-			motionDetection(prvFr,nxtFr,motionCompMask,motionMask,pMOG2,name+" FGFeat");
-			motionDetection(prvFrNoisy,nxtFrNoisy,motionCompMaskNoisy,motionMaskNoisy,pMOG2Noisy,nameNoisy+" FGFeat");
+			motionDetection(prvFr,nxtFr,motionCompMask,motionMask,pMOG2,name+" Morph Rec");
+			// motionDetection(prvFr,nxtFr,motionCompMask,motionMask,pMOG2Exp,name+" Expansion",true,true,false);
+			motionDetection(prvFrNoisy,nxtFrNoisy,motionCompMaskNoisy,motionMaskNoisy,pMOG2Noisy,nameNoisy+" Morph Rec");
+			// motionDetection(prvFrNoisy,nxtFrNoisy,motionCompMaskNoisy,motionMaskNoisy,pMOG2NoisyExp,nameNoisy+" Expansion",true,true,false);
 
 			if((keyboard=waitKey(0)) == ESCAPE_NL || keyboard == ESCAPE_EN)
 				break;
