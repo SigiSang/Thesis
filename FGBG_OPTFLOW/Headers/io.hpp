@@ -21,9 +21,9 @@ namespace io {
 	/** Shown image properties and helper values **/
 	int imX=5,imY=5
 		,shownImages=0
-		,consecutiveImages=4
+		,consecutiveImages=5
 		,normalXSize=320
-		,normalYSize=260;
+		,normalYSize=261;
 
 	map<string,vector<int> > imgPos;
 
@@ -50,7 +50,7 @@ namespace io {
 	    imX += xSize+margin;
 	    if(++shownImages%consecutiveImages == 0){
 	    	imX = 5;
-	    	imY += ySize+margin;
+	    	imY += ySize;
 	    }
 	}
 
@@ -92,18 +92,38 @@ namespace io {
 		}
 	}
 
-	void showBlendedImages(vector<Mat> & frames, vector<Mat> & masks) {
-		double alpha = 1.0;
-		double beta = 1.0;
-		namedWindow( "Display window", WINDOW_AUTOSIZE );
-		for(int i = 0; i<frames.size(); i++) {
-			Mat dst;
-			if(frames[i].channels()>1) cvtColor(frames[i], frames[i], CV_RGB2GRAY);
-			if(masks[i].channels()>1) cvtColor(masks[i], masks[i], CV_RGB2GRAY);
-			addWeighted( masks[i] , alpha, frames[i], beta, 0.0, dst);
-			imshow( "Display window", dst );  
-			waitKey(0);
+	void calculateScores(Mat& gt, Mat& mask) {
+	    if(gt.type() != CV_8UC1 || mask.type() != CV_8UC1){
+	    	cerr<<"Invalid Mat type in io::calculateScores! Must be CV_8UC1."<<endl;
+	    	throw;
+	    }
+	    Mat confusion = Mat::zeros(2,2, CV_32S);
+	    int size = gt.rows*gt.cols;
+		for(int i=0; i<size;i++) {
+		    uchar label = gt.at<uchar>(i);
+		    uchar predicted = mask.at<uchar>(i);
+		    if(label==255 && predicted==255) {	//TP
+		        confusion.at<int>(0,0)++;
+		    }
+		    else if (label==0 && predicted==0) {	//TN
+		        confusion.at<int>(1,1)++;
+		    }
+		    else if (label==0 && predicted==255) {	//FP
+		        confusion.at<int>(1,0)++;
+		    }
+		    else if (label==255 && predicted==0) {	//FN
+		        confusion.at<int>(0,1)++;
+		    }
 		}
+		// double accuracy = ((double)(confusion.at<int>(0,0)+confusion.at<int>(1,1)))/((double)gt.rows*gt.cols)*100;
+		double precision = ((double)confusion.at<int>(0,0)/(confusion.at<int>(0,0)+confusion.at<int>(1,0))*100);
+		double recall = ((double)confusion.at<int>(0,0)/(confusion.at<int>(0,0)+confusion.at<int>(0,1)))*100;	
+		double F = 2*(precision*recall)/(precision+recall);
+	    // cout<<"Confusion matrix: "<<endl<<confusion<<endl;
+	    // cout<<"Precision: "<<precision<<"%"<<endl;
+	    // cout<<"Recall: "<<recall<<"%"<<endl;
+	    // cout<<"Accuracy: "<<accuracy<<"%"<<endl;   
+	    cout<<"F: "<<F<<"%"<<endl;
 	}
 }
 

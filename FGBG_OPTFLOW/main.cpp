@@ -181,18 +181,23 @@ void similarNeighbourWeights(const Mat& src, const Mat& data, Mat& weights){
 		/* Aanpassen naar deltaX en deltaY, als deze gelijk zijn is dat correcter dan hoek&&grootte.
 		*  Zal nu wss exactere maatstaf zijn, intervallen rond delta's kan nuttig zijn
 		*/
-		int angle = data.at<DataVec>(y,x)[1];
-		int size = data.at<DataVec>(y,x)[2];
-		if(angle > 0 && size > 0){
+		ushort deltaX = data.at<DataVec>(y,x)[1];
+		ushort deltaY = data.at<DataVec>(y,x)[2];
+		if(deltaX > 0 && deltaY > 0){
 			for(int i=-1; i<=r; i+=r){
 			if(x+i>0 && x+i < src.cols){
 				for(int j=-1; j<=r; j+=r){
 				if(!(i==0 && j==0) && y+j>0 && y+j < src.rows){
-					if(angle == data.at<DataVec>(y+j,x+i)[1]
+					/**/
+					if(deltaX == data.at<DataVec>(y+j,x+i)[1]
 						&&
-						size == data.at<DataVec>(y+j,x+i)[2]){
-					// if(angle == data.at<DataVec>(y+j,x+i)[1]){
-					// if(size == data.at<DataVec>(y+j,x+i)[2]){
+						deltaY == data.at<DataVec>(y+j,x+i)[2]){
+					/**
+					int margin = 3;
+					if(deltaX-margin <= data.at<DataVec>(y+j,x+i)[1] && data.at<DataVec>(y+j,x+i)[1] < deltaX+margin
+						&&
+						deltaY-margin <= data.at<DataVec>(y+j,x+i)[2] && data.at<DataVec>(y+j,x+i)[2] < deltaY+margin){
+					/**/
 						neighbours++;
 					}
 				}
@@ -218,14 +223,11 @@ void regularization(const Mat& src, Mat& dst, Mat& data, vector<uchar>& status, 
     for(int ptsIdx=0;ptsIdx<status.size();ptsIdx++){
     	if(status[ptsIdx]){
 			int x1=prvPts[ptsIdx].x,y1=prvPts[ptsIdx].y,x2=nxtPts[ptsIdx].x,y2=nxtPts[ptsIdx].y;
-			double angle = ( atan2( (double)y1-y2, (double)x2-x1) )*180/PI;
-			int size = sqrt( square(y1 - y2) + square(x2 - x1) );
-			if(size>=500) continue;
-			if(angle<0) angle += 360;
+			ushort deltaX = x2-x1;
+			ushort deltaY = y2-y1;
 			data.at<DataVec>(y1,x1)[0] = ptsIdx;
-			// TODO veranderen naar deltaX en deltaY
-			data.at<DataVec>(y1,x1)[1] = (unsigned short)angle;
-			data.at<DataVec>(y1,x1)[2] = (unsigned short)size;
+			data.at<DataVec>(y1,x1)[1] = deltaX;
+			data.at<DataVec>(y1,x1)[2] = deltaY;
     	}
     }
     similarNeighbourWeights(src,data,weights);
@@ -294,9 +296,14 @@ void morphologicalReconstruction(const Mat& mask, Mat& dst, Mat& weights){
    		hasChanged = (countNonZero(maskedDilation!=prevMaskedDilation) != 0);
    	}while(hasChanged);
    	maskedDilation.copyTo(dst);
+
+
+ //   	strucSize = 3;
+	// struc = getStructuringElement(MORPH_RECT,Size(strucSize,strucSize));
+	// morphologyEx(dst,dst,MORPH_CLOSE,struc);
 }
 
-void motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motionCompMask, Mat& motionMask, Ptr<BackgroundSubtractor> pMOG2, string name, bool showSrc=true, bool useForegroundFeatures=true, bool useMorphRec=true){
+void motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motionCompMask, Mat& motionMask, Ptr<BackgroundSubtractor> pMOG2, string name, bool useRegExpansion, bool showSrc=true, bool useForegroundFeatures=true){
 	bool secondIter = false;
 
 	vector<uchar> status;
@@ -310,50 +317,56 @@ void motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motionCompMask, Mat& motionMas
 	getOptFlowFeatures(motionCompMask,fgMask,combMask,prvPts,useForegroundFeatures);
 	opticalFlow(prvFr,nxtFr,optFlow1,status,prvPts,nxtPts,fgMask);
 	regularization(prvFr,motionMask,data,status,prvPts,nxtPts,weights);
-   	// if(useMorphRec){
-   	// 	morphologicalReconstruction(fgMask,motionMask,motionMask);
-   	// }else{
-   	// 	expandRegions(prvFr,fgMask,data,regulData,motionMask);
-   	// }
 
+	/**/
+	if(!useRegExpansion){
    	// Morphological reconstruction
    	morphologicalReconstruction(fgMask,motionMask,motionMask);
-
+   	/**/
+   	}else{
    	// Morph + Exp
- //   	uchar threshold = 127;
- //   	Mat motMaskMorph,motMaskExp;
- //   	morphologicalReconstruction(fgMask,motMaskMorph,motionMask);
- //   	motionMask.copyTo(motMaskExp);
- //   	expandRegions(prvFr,fgMask,data,regulData,motMaskExp);
- //   	for(int x=0;x<motMaskMorph.cols;x++){
- //   	for(int y=0;y<motMaskMorph.rows;y++){
- //   		if(motMaskMorph.at<uchar>(y,x) > threshold
- //   			|| motMaskExp.at<uchar>(y,x) > threshold){
- //   			motionMask.at<uchar>(y,x) = -1;
- //   		}
-	// }
- //   	}
+   	uchar threshold = 127;
+   	Mat motMaskMorph,motMaskExp;
+   	morphologicalReconstruction(fgMask,motMaskMorph,motionMask);
+   	motionMask.copyTo(motMaskExp);
+   	expandRegions(prvFr,fgMask,data,regulData,motMaskExp);
+   	for(int x=0;x<motMaskMorph.cols;x++){
+   	for(int y=0;y<motMaskMorph.rows;y++){
+   		if(motMaskMorph.at<uchar>(y,x) > threshold
+   			|| motMaskExp.at<uchar>(y,x) > threshold){
+   			motionMask.at<uchar>(y,x) = -1;
+   		}
+	}
+   	}
+   	/**/
+   	}
 
+   	int strucSize = 3;
+	Mat struc = getStructuringElement(MORPH_RECT,Size(strucSize,strucSize));
+	morphologyEx(motionMask,motionMask,MORPH_CLOSE,struc);
+
+   	/**
 	bool resize = true;
 	if(showSrc) io::showImage(name+" Src",nxtFr,resize);
 	// io::showImage(name+" Smoothing",smoothing,resize);
 	io::showImage(name+" Foreground Mask",fgMask,resize);
 	// io::showImage(name+" Comb Mask",combMask,resize);
-	// io::showImage(name+" OptFlow1",optFlow1,resize);
+	io::showImage(name+" OptFlow1",optFlow1,resize);
 	io::showImage(name+" Weights",weights,resize);
-	io::showImage(name+" Morph Rec",motMaskMorph,resize);
-	io::showImage(name+" Expansion",motMaskExp,resize);
+	// io::showImage(name+" Morph Rec",motMaskMorph,resize);
+	// io::showImage(name+" Expansion",motMaskExp,resize);
 	if(secondIter) io::showImage(name+" OptFlow2",optFlow2,resize);
+	/**/
 	io::showImage(name+" MotionMask",motionMask,resize);
 }
 
 int main (int argc, char** argv){
 	int keyboard = -1;
 
-	// string dirInput = "input/streetcorner/";
-	string dirInput = "input/tramstation/";
-	// string dirInput = "input/blizzard/";
-	// string dirInput = "input/pedestrians/";
+	// string dirInput = "input/streetcorner/"; int skipToFrame = 150;
+	string dirInput = "input/tramstation/"; int skipToFrame = 30;
+	// string dirInput = "input/blizzard/"; int skipToFrame = 30;
+	// string dirInput = "input/pedestrians/"; int skipToFrame = 30;
 	string regex = "%06d.jpg";
 
 	// BGS Configuration
@@ -366,6 +379,7 @@ int main (int argc, char** argv){
 
 	VideoCapture cap(dirInput+regex);
 	if(cap.isOpened() && cap.read(prvFr)){
+		int frameNum = 1;
 		cvtColor(prvFr,prvFr,CV_BGR2GRAY);
 		Ptr<BackgroundSubtractor> pMOG2 = createBackgroundSubtractorMOG2(history,varThreshold,detectShadows);
 		Ptr<BackgroundSubtractor> pMOG2Noisy = createBackgroundSubtractorMOG2(history,varThreshold,detectShadows);
@@ -374,18 +388,44 @@ int main (int argc, char** argv){
 		motionCompMask = Mat::zeros(prvFr.size(),CV_8UC1);
 		motionCompMaskNoisy = Mat::zeros(prvFr.size(),CV_8UC1);
 		while(cap.read(nxtFr)){
+			frameNum++;
 			string name="Original",nameNoisy="Noisy";
 			if(nxtFr.channels() > 1) cvtColor(nxtFr,nxtFr,CV_BGR2GRAY);
 			addNoise(prvFr,prvFrNoisy);
 			addNoise(nxtFr,nxtFrNoisy);
 
-			motionDetection(prvFr,nxtFr,motionCompMask,motionMask,pMOG2,name+" Morph Rec");
-			// motionDetection(prvFr,nxtFr,motionCompMask,motionMask,pMOG2Exp,name+" Expansion",true,true,false);
-			motionDetection(prvFrNoisy,nxtFrNoisy,motionCompMaskNoisy,motionMaskNoisy,pMOG2Noisy,nameNoisy+" Morph Rec");
-			// motionDetection(prvFrNoisy,nxtFrNoisy,motionCompMaskNoisy,motionMaskNoisy,pMOG2NoisyExp,nameNoisy+" Expansion",true,true,false);
+			// Use only morphological reconstruction
+			motionDetection(prvFr,nxtFr,motionCompMask,motionMask,pMOG2,name+"",false);
+			motionDetection(prvFrNoisy,nxtFrNoisy,motionCompMaskNoisy,motionMaskNoisy,pMOG2Noisy,nameNoisy+"",false);
 
-			if((keyboard=waitKey(0)) == ESCAPE_NL || keyboard == ESCAPE_EN)
-				break;
+
+			if(frameNum>=skipToFrame){
+		    	cout<<"Frame "<<frameNum<<endl;
+		    	cout<<"Comp Inter"<<endl;
+				io::calculateScores(motionMask,motionMaskNoisy);
+
+
+		  //   	cout<<"Comp gt-normal"<<endl;
+				// io::calculateScores(gt,motionMask);
+		  //   	cout<<"Comp gt-noisy"<<endl;
+				// io::calculateScores(gt,motionMaskNoisy);
+				cout<<endl;
+			}
+
+			// Use morphological reconstruction followed by region expansion
+			// motionDetection(prvFr,nxtFr,motionCompMask,motionMask,pMOG2Exp,name+" Exp",true);
+			// motionDetection(prvFrNoisy,nxtFrNoisy,motionCompMaskNoisy,motionMaskNoisy,pMOG2NoisyExp,nameNoisy+" Exp",true);
+
+			// if(frameNum>=skipToFrame){
+		 //    	cout<<"Frame "<<frameNum<<", with Exp, comp Inter"<<endl;
+			// 	io::calculateScores(motionMask,motionMaskNoisy);
+			// 	cout<<endl;
+			// }
+
+			if(frameNum>=skipToFrame){
+				if((keyboard=waitKey(0)) == ESCAPE_NL || keyboard == ESCAPE_EN)
+					break;
+			}
 			nxtFr.copyTo(prvFr);
 		}
 	}else{
