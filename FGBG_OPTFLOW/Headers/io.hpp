@@ -79,17 +79,9 @@ namespace io {
 	    }
 	}
 
-	void readImages(String folder, String regex, vector<Mat>& images) {
-		VideoCapture cap(folder+"/"+regex);
-		images.clear();
-		while( cap.isOpened() )
-		{
-		    Mat img;
-		    if(!cap.read(img)) {
-		    	return;
-		    }
-		   	images.push_back(img);
-		}
+	bool fileExists(const string& name) {
+		struct stat buffer;   
+		return (stat (name.c_str(), &buffer) == 0); 
 	}
 
 	void calculateScores(Mat& gt, Mat& mask) {
