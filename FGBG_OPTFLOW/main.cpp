@@ -1,10 +1,11 @@
 #include <string>
 #include <iostream>
+#include <opencv2/opencv.hpp>
 #include <opencv2/core.hpp>
-// #include <opencv2/imgproc.hpp>
-// #include <opencv2/imgcodecs.hpp>
+#include <opencv2/imgproc.hpp>
+#include <opencv2/imgcodecs.hpp>
 #include <opencv2/highgui.hpp>
-// #include <opencv2/ml.hpp>
+#include <opencv2/ml.hpp>
 #include "Headers/io.hpp"
 #include <opencv2/video.hpp>
 #include <cmath>
@@ -13,7 +14,7 @@ using namespace std;
 using namespace cv;
 // using namespace cv::ml;
 
-typedef Vec<unsigned short,3> DataVec;
+typedef Vec<short,3> DataVec;
 
 const int ESCAPE_NL = 537919515;
 const int ESCAPE_EN = 1048603;
@@ -126,17 +127,17 @@ void backgroundSubtraction(const Mat& frame, Mat& fgMask, Ptr<BackgroundSubtract
     pMOG2->apply(frame, fgMask,learningRate);
 }
 
-void getOptFlowFeatures(const Mat& motionCompMask, const Mat& fgMask, Mat& combMask, vector<Point2f>& goodFeaturesToTrack, bool useForegroundFeatures=true){
-	const int width = motionCompMask.cols, height = motionCompMask.rows;
+void getOptFlowFeatures(const Mat& motCompMask, const Mat& fgMask, Mat& combinedMask, vector<Point2f>& goodFeaturesToTrack, bool useForegroundFeatures=true){
+	const int width = motCompMask.cols, height = motCompMask.rows;
 	if(!goodFeaturesToTrack.empty()) goodFeaturesToTrack.clear();
 
 	// Combine previous motion mask and current foreground mask
-	fgMask.copyTo(combMask);
-	// bitwise_or(motionCompMask,fgMask,combMask);
+	fgMask.copyTo(combinedMask);
+	bitwise_or(motCompMask,fgMask,combinedMask);
 
 	// Add points from combined mask
     if(useForegroundFeatures)
-    	binMat2Vec(combMask,goodFeaturesToTrack);
+    	binMat2Vec(combinedMask,goodFeaturesToTrack);
 
 	 // If foreground consists of more than 80% of the images pixels, ignore it for being too much data, opencv function will be used instead.
 	 if(goodFeaturesToTrack.size() > 0.8 * (width*height) )
@@ -180,19 +181,19 @@ void similarNeighbourWeighting(const Mat& src, const Mat& data, Mat& weights){
 	for(int x=0;x<src.cols;x++){
 	for(int y=0;y<src.rows;y++){
 		short neighbours = 0;
-		ushort deltaX = data.at<DataVec>(y,x)[1];
-		ushort deltaY = data.at<DataVec>(y,x)[2];
-		if(deltaX > 0 && deltaY > 0){
+		short deltaX = data.at<DataVec>(y,x)[1];
+		short deltaY = data.at<DataVec>(y,x)[2];
+		if(deltaX != 0 && deltaY != 0){
 			for(int i=-1; i<=r; i+=r){
 			if(x+i>0 && x+i < src.cols){
 				for(int j=-1; j<=r; j+=r){
 				if(!(i==0 && j==0) && y+j>0 && y+j < src.rows){
-					/**/
+					/**
 					if(deltaX == data.at<DataVec>(y+j,x+i)[1]
 						&&
 						deltaY == data.at<DataVec>(y+j,x+i)[2]){
-					/**
-					int margin = 3;
+					/**/
+					int margin = 1;
 					if(deltaX-margin <= data.at<DataVec>(y+j,x+i)[1] && data.at<DataVec>(y+j,x+i)[1] < deltaX+margin
 						&&
 						deltaY-margin <= data.at<DataVec>(y+j,x+i)[2] && data.at<DataVec>(y+j,x+i)[2] < deltaY+margin){
@@ -210,44 +211,46 @@ void similarNeighbourWeighting(const Mat& src, const Mat& data, Mat& weights){
 	}
 }
 
-void regularization(const Mat& src, Mat& dst, Mat& data, vector<uchar>& status, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& weights){
+void optFlowRegularization(const Mat& src, Mat& dst, vector<uchar>& status, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& weights, Mat& data){
 
     data = Mat::zeros(src.size(),CV_16UC3);
 	weights = Mat::zeros(src.size(),CV_32FC1);
 
+	// Optical flow to data
     for(int ptsIdx=0;ptsIdx<status.size();ptsIdx++){
     	if(status[ptsIdx]){
 			int x1=prvPts[ptsIdx].x,y1=prvPts[ptsIdx].y,x2=nxtPts[ptsIdx].x,y2=nxtPts[ptsIdx].y;
-			ushort deltaX = x2-x1;
-			ushort deltaY = y2-y1;
+			short deltaX = x2-x1;
+			short deltaY = y2-y1;
+			// if(deltaX != 0 && deltaY != 0)
+			// 	cout<<deltaX<<","<<deltaY<<","<<x2<<","<<x1<<","<<y2<<","<<y1<<endl;
 			data.at<DataVec>(y1,x1)[0] = ptsIdx;
 			data.at<DataVec>(y1,x1)[1] = deltaX;
 			data.at<DataVec>(y1,x1)[2] = deltaY;
     	}
     }
 
-    similarNeighbourWeighting(src,data,weights);
-    // TODO regularize data by regio
+    // Weighting for regularization
+	similarNeighbourWeighting(src,data,weights);
 
     dst = Mat::ones(weights.size(),CV_8UC1);
     weights.convertTo(dst,CV_8UC1,255);
    	threshold(dst,dst,127);
 }
 
-void expandByList(const Mat& src, const Mat& mask, Mat& minorMask, vector<bool>& expanded, vector<int> toExpand, Mat& regulData, ushort deltaX, ushort deltaY){
-    const int width=mask.cols, height=mask.rows, r=1;
+void expandByList(const Mat& mask, Mat& minorMask, vector<bool>& expanded, vector<int> toExpand, ushort deltaX, ushort deltaY){
+    const int width=mask.cols, height=mask.rows, r=2;
 	for(int i=0; i<toExpand.size();i++){
     	int idx = toExpand[i];
     	if(!expanded[idx]){
     		expanded[idx] = true;
     		minorMask.at<uchar>(idx)=(uchar)(-1); // Max value
-    		regulData.at<DataVec>(idx+deltaY*width+deltaX) = DataVec(0,deltaX,deltaY);
-			for(int i=-1; i<=r; i+=r){
-			for(int j=-1; j<=r; j+=r){
-				int idx2 = idx+j*width+i;
-				if(!(i==0 && j==0) && idx2>0 && idx2 < width*height){
-					if( (short)(mask.at<unsigned char>(idx))>0){
-						toExpand.push_back(idx2);
+			for(int i=-r; i<=r; i++){
+			for(int j=-r; j<=r; j++){
+				int idxNb = idx+j*width+i;
+				if(idxNb != idx && idxNb>0 && idxNb < width*height){
+					if( (short)(mask.at<uchar>(idxNb))>0){
+						toExpand.push_back(idxNb);
 					}
 				}
 			}
@@ -256,9 +259,8 @@ void expandByList(const Mat& src, const Mat& mask, Mat& minorMask, vector<bool>&
 	}
 }
 
-void expandRegions(const Mat& src, const Mat& mask, const Mat& data, Mat& regulData, Mat& minorMask){
-    const int width=src.cols, height=src.rows;
-    regulData = Mat::zeros(data.size(),data.type());
+void expandPatches(const Mat& mask, const Mat& data, Mat& minorMask){
+    const int width=mask.cols, height=mask.rows;
    	vector<bool> expanded(width*height,false);
     for(int x=0;x<width;x++){
     for(int y=0;y<height;y++){
@@ -266,11 +268,11 @@ void expandRegions(const Mat& src, const Mat& mask, const Mat& data, Mat& regulD
     		int idx = y*width+x;
 	    	if(!expanded[idx]){
 				vector<int> toExpand;
-				ushort deltaX = data.at<DataVec>(y,x)[1];
-				ushort deltaY = data.at<DataVec>(y,x)[2];
+				short deltaX = data.at<DataVec>(y,x)[1];
+				short deltaY = data.at<DataVec>(y,x)[2];
 
 				toExpand.push_back(idx);
-				expandByList(src,mask,minorMask,expanded,toExpand,regulData,deltaX,deltaY);
+				expandByList(mask,minorMask,expanded,toExpand,deltaX,deltaY);
 	    	}
 	    }
     }
@@ -280,24 +282,90 @@ void expandRegions(const Mat& src, const Mat& mask, const Mat& data, Mat& regulD
 void morphologicalReconstruction(Mat& dst, const Mat& majorMask, const Mat& minorMask){
    	Mat dilation,maskedDilation,prevMaskedDilation;
    	bool hasChanged;
-   	int strucSize = 5;
+   	int strucSize = 7;
+   	int numOfIterations = 0;
 	Mat struc = getStructuringElement(MORPH_ELLIPSE,Size(strucSize,strucSize));
-    // TODO Change to threshold value variable
+    // TODO Change threshold value to variable
    	threshold(minorMask,maskedDilation,127);
    	do{
+   		numOfIterations++;
    		maskedDilation.copyTo(prevMaskedDilation);
    		dilate(prevMaskedDilation,dilation,struc);
    		min(dilation,majorMask,maskedDilation);
    		hasChanged = (countNonZero(maskedDilation!=prevMaskedDilation) != 0);
    	}while(hasChanged);
+   	// cout<<"Morph Reconstr Iterations: "<<numOfIterations<<endl;
    	maskedDilation.copyTo(dst);
-
- //   	strucSize = 3;
-	// struc = getStructuringElement(MORPH_RECT,Size(strucSize,strucSize));
-	// morphologyEx(dst,dst,MORPH_CLOSE,struc);
 }
 
-void motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motionCompMask, Mat& motionMask, Ptr<BackgroundSubtractor> pMOG2, string name, bool useRegExpansion, bool showSrc=true, bool useForegroundFeatures=true){
+void regularizeDataByList(const Mat& mask, vector<bool>& expanded, vector<int> toExpand, Mat& regulData, short deltaX, short deltaY){
+    const int width=mask.cols, height=mask.rows, r=1;
+    // cout<<">dX:"<<deltaX<<",dY:"<<deltaY<<endl;
+	for(int i=0; i<toExpand.size();i++){
+    	int idx = toExpand[i];
+    	if(!expanded[idx]){
+    		// cout<<">>check3"<<endl;
+    		expanded[idx] = true;
+    		// regulData.at<DataVec>(idx+deltaY*width+deltaX) = DataVec(0,deltaX,deltaY);
+    		regulData.at<DataVec>(idx) = DataVec(0,deltaX,deltaY);
+    		// cout<<">>>check4"<<endl;
+			for(int i=-r; i<=r; i++){
+			for(int j=-r; j<=r; j++){
+				int idxNb = idx+j*width+i;
+				if(idxNb != idx && idxNb>0 && idxNb < width*height){
+					if( (short)(mask.at<uchar>(idxNb))>0){
+						toExpand.push_back(idxNb);
+					}
+				}
+			}
+			}
+    	}
+	}
+}
+
+void checkRegulData(const Mat& mask, const Mat& regulData){
+	Mat regulMask = Mat::zeros(mask.size(),mask.type());
+    const int width=mask.cols, height=mask.rows;
+    for(int x=0;x<width;x++){
+    for(int y=0;y<height;y++){
+    	DataVec dv = regulData.at<DataVec>(y*width+x);
+    	if(dv[1]!=0 || dv[2]!=0){
+    		regulMask.at<uchar>(y,x) = -1;
+    	}
+    }
+    }
+    cout<<"Mask vs RegulMask ";
+    io::calculateScores(mask,regulMask);
+    io::showMaskOverlap(mask,"Mask",regulMask,"RegulMask");
+}
+
+void regularizeData(const Mat& mask, const Mat& data, Mat& regulData){
+    const int width=mask.cols, height=mask.rows;
+    regulData = Mat::zeros(data.size(),data.type());
+   	vector<bool> expanded(width*height,false);
+    for(int x=0;x<width;x++){
+    for(int y=0;y<height;y++){
+    	if((short)(mask.at<uchar>(y,x))>0){
+    		int idx = y*width+x;
+	    	if(!expanded[idx]){
+				vector<int> toExpand;
+				short deltaX = data.at<DataVec>(y,x)[1];
+				short deltaY = data.at<DataVec>(y,x)[2];
+
+				toExpand.push_back(idx);
+				regularizeDataByList(mask,expanded,toExpand,regulData,deltaX,deltaY);
+	    	}
+	    }
+    }
+    }
+    // checkRegulData(mask,regulData);
+}
+
+void motionCompensation(const Mat& motionMask, Mat& motCompMask, const Mat& data){
+	//TODO create motion compensated mask with regularized data
+}
+
+void motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motionMask, Ptr<BackgroundSubtractor> pMOG2, string name, bool useRegExpansion, bool showSrc=true, bool useForegroundFeatures=true){
 	bool secondIter = false;
 
 	vector<uchar> status;
@@ -306,9 +374,9 @@ void motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motionCompMask, Mat& motionMas
 	Mat fgMask,combMask,maskReg,weights,optFlow1,optFlow2;
 
 	backgroundSubtraction(prvFr,fgMask,pMOG2);
-	getOptFlowFeatures(motionCompMask,fgMask,combMask,prvPts,useForegroundFeatures);
+	getOptFlowFeatures(motCompMask,fgMask,combMask,prvPts,useForegroundFeatures);
 	opticalFlow(prvFr,nxtFr,optFlow1,status,prvPts,nxtPts,fgMask);
-	regularization(prvFr,maskReg,data,status,prvPts,nxtPts,weights);
+	optFlowRegularization(prvFr,maskReg,status,prvPts,nxtPts,weights,data);
 
 	motionMask = Mat::zeros(prvFr.size(),CV_8UC1);
 	/**/
@@ -317,29 +385,44 @@ void motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motionCompMask, Mat& motionMas
 	   	morphologicalReconstruction(motionMask,fgMask,maskReg);
    	/**/
    	}else{
-   	// Morph + Exp
-	   	uchar threshold = 127;
-	   	Mat maskMorph,maskExp;
-	   	morphologicalReconstruction(maskMorph,fgMask,maskReg);
-	   	maskReg.copyTo(maskExp);
-	   	expandRegions(prvFr,fgMask,data,regulData,maskExp);
-	   	for(int x=0;x<maskMorph.cols;x++){
-	   	for(int y=0;y<maskMorph.rows;y++){
-	   		if(maskMorph.at<uchar>(y,x) > threshold
-	   			|| maskExp.at<uchar>(y,x) > threshold){
-	   			motionMask.at<uchar>(y,x) = -1;
-	   		}
-		}
-	   	}
+   		// Region Expansion
+	   	// uchar threshold = 127;
+	   	// Mat maskMorph,maskExp;
+	   	// morphologicalReconstruction(maskMorph,fgMask,maskReg);
+	   	maskReg.copyTo(motionMask);
+	   	expandPatches(fgMask,data,motionMask);
+	 //   	for(int x=0;x<maskMorph.cols;x++){
+	 //   	for(int y=0;y<maskMorph.rows;y++){
+	 //   		if(maskMorph.at<uchar>(y,x) > threshold
+	 //   			|| maskExp.at<uchar>(y,x) > threshold){
+	 //   			motionMask.at<uchar>(y,x) = -1;
+	 //   		}
+		// }
+	 //   	}
    	/**/
    	}
+
+	// cout<<"Morph vs Exp"<<endl;
+	// Mat maskMorph,maskExp;
+	// morphologicalReconstruction(maskMorph,fgMask,maskReg);
+	// maskReg.copyTo(maskExp);
+	// expandPatches(fgMask,data,maskExp);
+	// io::calculateScores(maskMorph,maskExp);
+    // io::showMaskOverlap(maskMorph,"Morph",maskExp,"Exp");
+
+	// maskMorph.copyTo(motionMask);
 
    	int strucSize = 3;
 	Mat struc = getStructuringElement(MORPH_RECT,Size(strucSize,strucSize));
 	morphologyEx(motionMask,motionMask,MORPH_CLOSE,struc);
 
-   	/**
+	// TODO create regularized data (same motion vector per region)
+   	regularizeData(motionMask,data,regulData);
+
+	motionCompensation(motionMask,motCompMask,regulData);
+
 	bool resize = true;
+   	/**
 	if(showSrc) io::showImage(name+" Src",nxtFr,resize);
 	io::showImage(name+" Foreground Mask",fgMask,resize);
 	// io::showImage(name+" Comb Mask",combMask,resize);
@@ -357,7 +440,7 @@ int main (int argc, char** argv){
 	char buffer[30];
 
 	// string dirInput = "input/streetcorner/"; int skipToFrame = 150;
-	string dirInput = "input/tramStation/"; int skipToFrame = 93;
+	string dirInput = "input/tramStation/"; int skipToFrame = 190;//93;
 	// string dirInput = "input/blizzard/"; int skipToFrame = 30;
 	// string dirInput = "input/pedestrians/"; int skipToFrame = 30;
 	string regexGt = "groundtruth/%06d.png";
@@ -371,8 +454,8 @@ int main (int argc, char** argv){
 	double varThreshold = 16;
 	bool detectShadows=false;
 
-	Mat prvFr,nxtFr,nxtGt,motionCompMask,motionMask;
-	Mat prvFrNoisy,nxtFrNoisy,motionCompMaskNoisy,motionMaskNoisy;
+	Mat prvFr,nxtFr,nxtGt,motCompMask,motionMask;
+	Mat prvFrNoisy,nxtFrNoisy,motCompMaskNoisy,motionMaskNoisy;
 	Mat ROI = imread(dirInput+fnRoi,CV_LOAD_IMAGE_GRAYSCALE);
 
 	sprintf(buffer,(dirInput+regexIn).c_str(),0); fnFrameIn = string(buffer);
@@ -384,10 +467,10 @@ int main (int argc, char** argv){
 
 	Ptr<BackgroundSubtractor> pMOG2 = createBackgroundSubtractorMOG2(history,varThreshold,detectShadows);
 	Ptr<BackgroundSubtractor> pMOG2Noisy = createBackgroundSubtractorMOG2(history,varThreshold,detectShadows);
-	// Ptr<BackgroundSubtractor> pMOG2Exp = createBackgroundSubtractorMOG2(history,varThreshold,detectShadows);
-	// Ptr<BackgroundSubtractor> pMOG2NoisyExp = createBackgroundSubtractorMOG2(history,varThreshold,detectShadows);
-	motionCompMask = Mat::zeros(prvFr.size(),CV_8UC1);
-	motionCompMask.copyTo(motionCompMaskNoisy);
+	Ptr<BackgroundSubtractor> pMOG2Exp = createBackgroundSubtractorMOG2(history,varThreshold,detectShadows);
+	Ptr<BackgroundSubtractor> pMOG2NoisyExp = createBackgroundSubtractorMOG2(history,varThreshold,detectShadows);
+	motCompMask = Mat::zeros(prvFr.size(),CV_8UC1);
+	motCompMask.copyTo(motCompMaskNoisy);
 
 	const int MAX_FRAME_IDX = 2500;
 	for(int frameIdx = 1;frameIdx<MAX_FRAME_IDX;frameIdx++){
@@ -399,26 +482,30 @@ int main (int argc, char** argv){
 			stop();
 		}
 		nxtGt = imread(fnFrameGt,CV_LOAD_IMAGE_GRAYSCALE);
-		if(!nxtGt.data)
+		if(!nxtGt.data){
 			cerr<<"Problem reading GT: "<<fnFrameGt<<endl;
+			throw;
+		}
 		nxtFr = imread(fnFrameIn,CV_LOAD_IMAGE_GRAYSCALE);
 
 		addNoise(prvFr,prvFrNoisy);
 		addNoise(nxtFr,nxtFrNoisy);
 
 		// Use only morphological reconstruction
-		motionDetection(prvFr,nxtFr,motionCompMask,motionMask,pMOG2,name+"",false);
-		motionDetection(prvFrNoisy,nxtFrNoisy,motionCompMaskNoisy,motionMaskNoisy,pMOG2Noisy,nameNoisy+"",false);
+		motionDetection(prvFr,nxtFr,motCompMask,motionMask,pMOG2,name+"",false);
+		motionDetection(prvFrNoisy,nxtFrNoisy,motCompMaskNoisy,motionMaskNoisy,pMOG2Noisy,nameNoisy+"",false);
 
 		io::showImage(name+" GT",nxtGt,true);
+		bitwise_and(nxtGt,ROI,nxtGt);
+		threshold(nxtGt,nxtGt,1);
 		if(frameIdx>=skipToFrame){
 			Mat motMaskROI,motMaskROINoisy;
 			bitwise_and(motionMask,ROI,motMaskROI);
 			bitwise_and(motionMaskNoisy,ROI,motMaskROINoisy);
 
-	    	cout<<"Frame "<<frameIdx<<endl;
-	    	cout<<"Comp full inter: ";
-			io::calculateScores(motionMask,motionMaskNoisy);
+	    	cout<<"Frame "<<frameIdx<<", with Morph"<<endl;
+	  //   	cout<<"Comp full inter: ";
+			// io::calculateScores(motionMask,motionMaskNoisy);
 	    	cout<<"Comp ROI gt-normal: ";
 			io::calculateScores(nxtGt,motionMask);
 	    	cout<<"Comp ROI gt-noisy: ";
@@ -427,14 +514,23 @@ int main (int argc, char** argv){
 		}
 
 		// Use morphological reconstruction followed by region expansion
-		// motionDetection(prvFr,nxtFr,motionCompMask,motionMask,pMOG2Exp,name+" Exp",true);
-		// motionDetection(prvFrNoisy,nxtFrNoisy,motionCompMaskNoisy,motionMaskNoisy,pMOG2NoisyExp,nameNoisy+" Exp",true);
+		motionDetection(prvFr,nxtFr,motCompMask,motionMask,pMOG2Exp,name+" Exp",true);
+		motionDetection(prvFrNoisy,nxtFrNoisy,motCompMaskNoisy,motionMaskNoisy,pMOG2NoisyExp,nameNoisy+" Exp",true);
 
-		// if(frameIdx>=skipToFrame){
-	 //    	cout<<"Frame "<<frameIdx<<", with Exp, comp Inter"<<endl;
-		// 	io::calculateScores(motionMask,motionMaskNoisy);
-		// 	cout<<endl;
-		// }
+		if(frameIdx>=skipToFrame){
+			Mat motMaskROI,motMaskROINoisy;
+			bitwise_and(motionMask,ROI,motMaskROI);
+			bitwise_and(motionMaskNoisy,ROI,motMaskROINoisy);
+
+	    	cout<<"Frame "<<frameIdx<<", with Exp"<<endl;
+	  //   	cout<<"Comp full inter: ";
+			// io::calculateScores(motionMask,motionMaskNoisy);
+	    	cout<<"Comp ROI gt-normal: ";
+			io::calculateScores(nxtGt,motionMask);
+	    	cout<<"Comp ROI gt-noisy: ";
+			io::calculateScores(nxtGt,motionMaskNoisy);
+			cout<<endl;
+		}
 
 		if(frameIdx>=skipToFrame){
 			if((keyboard=waitKey(0)) == ESCAPE_NL || keyboard == ESCAPE_EN)

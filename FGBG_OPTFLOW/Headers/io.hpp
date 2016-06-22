@@ -21,13 +21,13 @@ namespace io {
 	/** Shown image properties and helper values **/
 	int imX=5,imY=5
 		,shownImages=0
-		,consecutiveImages=5
+		,consecutiveImages=3
 		,normalXSize=320
 		,normalYSize=261;
 
 	map<string,vector<int> > imgPos;
 
-	void showImage(string windowName,Mat& img, bool resize=false){
+	void showImage(string windowName,const Mat& img, bool resize=false){
 	    int windowFlag, xSize, ySize, margin=3;
 	    if(resize){
 	        windowFlag = WINDOW_NORMAL;
@@ -84,16 +84,16 @@ namespace io {
 		return (stat (name.c_str(), &buffer) == 0); 
 	}
 
-	void calculateScores(Mat& gt, Mat& mask) {
+	void calculateScores(const Mat& gt, const Mat& mask) {
 	    if(gt.type() != CV_8UC1 || mask.type() != CV_8UC1){
 	    	cerr<<"Invalid Mat type in io::calculateScores! Must be CV_8UC1."<<endl;
 	    	throw;
 	    }
 	    Mat confusion = Mat::zeros(2,2, CV_32S);
-	    int size = gt.rows*gt.cols;
-		for(int i=0; i<size;i++) {
-		    uchar label = gt.at<uchar>(i);
-		    uchar predicted = mask.at<uchar>(i);
+		for(int y=0; y<gt.rows;y++) {
+		for(int x=0; x<gt.cols;x++) {
+		    short label = gt.at<uchar>(y,x);
+		    short predicted = mask.at<uchar>(y,x);
 		    if(label==255 && predicted==255) {	//TP
 		        confusion.at<int>(0,0)++;
 		    }
@@ -105,17 +105,28 @@ namespace io {
 		    }
 		    else if (label==255 && predicted==0) {	//FN
 		        confusion.at<int>(0,1)++;
+		    // }else{
+		    	// cout<<"EUNKKKKKK; l:"<<label<<",p:"<<predicted<<endl;
 		    }
 		}
-		// double accuracy = ((double)(confusion.at<int>(0,0)+confusion.at<int>(1,1)))/((double)gt.rows*gt.cols)*100;
+		}
 		double precision = ((double)confusion.at<int>(0,0)/(confusion.at<int>(0,0)+confusion.at<int>(1,0))*100);
 		double recall = ((double)confusion.at<int>(0,0)/(confusion.at<int>(0,0)+confusion.at<int>(0,1)))*100;	
 		double F = 2*(precision*recall)/(precision+recall);
 	    // cout<<"Confusion matrix: "<<endl<<confusion<<endl;
 	    // cout<<"Precision: "<<precision<<"%"<<endl;
 	    // cout<<"Recall: "<<recall<<"%"<<endl;
-	    // cout<<"Accuracy: "<<accuracy<<"%"<<endl;   
 	    cout<<"F: "<<F<<"%"<<endl;
+	}
+
+	void showMaskOverlap(const Mat& m1, string strM1, const Mat& m2, string strM2){
+		Mat dst,emptyMat = Mat::zeros(m1.size(),m1.type());
+		vector<Mat> mv;
+		mv.push_back(emptyMat);
+		mv.push_back(m1);
+		mv.push_back(m2);
+		merge(mv,dst);
+		showImage(string(strM1+" vs "+strM2),dst);
 	}
 }
 
