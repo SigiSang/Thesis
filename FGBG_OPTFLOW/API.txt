@@ -1,0 +1,141 @@
+--- Main ---
+Initialize background subtractor (OpenCV Mixture of Gaussians 2, MOG2).
+Start with first frame for previous frame (prvFrame), the second frame will be the first 'next frame' (nxtFrame).
+
+While there is a next frame:
+	Read next frame into nxtFrame.
+	Perform motion detection (motionDetection) using prvFrame, nxtFrame and MOG2.
+	Copy nxtFrame to prvFrame.
+
+
+--- motionDetection ---
+-- INPUT --
+prvFrame: previous frame in image sequence for motion detection
+nxtFrame: next/current frame in image sequence for motion detection
+MOG2: Mixture of Gaussians 2 BackgroundSubstractor
+-- OUTPUT --
+motionMask: motion mask for nxtFrame, detected moving pixels between prvFrame and nxtFrame  -->(implemantatie niet correct! Zie TODO)
+motCompMask: motion compensated mask using motionMask and regularized motion vectors, estimate of moving pixels in frame after nxtFrame.
+-- VARIABLES --
+status: array of unsigned chars, contains result of optical flow. Contains optical flow result status for every element in the frame (matrix). @see calcOpticalFlowPyrLK
+prvPts: array of points (2D float coordinates). Source points of motion vectors from optical flow, coordinates for pixels in prvFrame. @see calcOpticalFlowPyrLK
+nxtPts: array of points (2D float coordinates). End points of motion vectors from optical flow, coordinates for pixels in nxtFrame. @see calcOpticalFlowPyrLK
+data: matrix, containing an array of four values per pixel of prvFrame. Such an array is a different representation of the motion vector at the corresponding pixel, from optical flow results. Used for regularization of motion vectors. @see optFlowRegularization
+regulData: same structure as data, contains data representing regularized motion vectors. @see regularizeData
+fgMask: foreground mask, result from background subtraction. @see backgroundSubtraction
+*combMask: bitwise OR combination of fgMask and motCompMask. @see getOptFlowFeatures
+weights: matrix of weights per pixel of the frame. Each weight is a continuous value for whether or not the pixel is moving..
+*maskReg: motion mask after initial data regularization (threshold based on weights of motion vectors). Input for morphological reconstruction.	@see optFlowRegularization (dst), morphologicalReconstruction
+*optFlow: OpenCV Mat, copy of nxtFrame with representation of motion vectors painted over. Motion vectors are shown as resulted from calcOpticalFlowPyrLK (OpenCV). @see opticalFlow
+
+-- BODY METHOD CALLS --
+backgroundSubstraction(prvFrame,fgMask,MOG2)
+getOptFlowFeatures(motCompMask,fgMask,combMask,prvPts,useForegroundFeatures)
+opticalFlow(prvFr,nxtFr,optFlow1,status,prvPts,nxtPts,fgMask)
+optFlowRegularization(prvFr,maskReg,status,prvPts,nxtPts,weights,data)
+{
+	morphologicalReconstruction(motionMask,fgMask,maskReg)
+	OR
+	expandPatches(fgMask,data,motionMask)
+	//Similar results
+}
+postProcessing(motionMask,MORPH_CLOSE)
+regularizeData(motionMask,data,regulData)
+motionCompensation(motionMask,motCompMask,regulData)
+
+-- TODO --
+>>motionMask is nu bewogen pixels in prvFrame en motCompMask bewegende pixels in nxtFrame.
+Dus eigenlijk moet motionMask eerst nog compenseerd worden voor gedetecteerde beweging tussen prvFrame en nxtFrame,
+vervolgens dat resultaat in motCompMask nog eens compenseren voor geschatte beweging tussen nxtFrame en daaropvolgende frame.
+
+
+-- backgroundSubstraction --
+-- INPUT --
+frame: the next frame to update the background subtraction with.
+MOG2: pointer to the MOG2  (Mixture of Gaussians) background subtraction object (OpenCV).
+-- OUTPUT --
+fgMask: the updated foreground mask returned by MOG2.
+-- BODY METHOD CALLS --
+/
+
+
+-- getOptFlowFeatures --
+-- INPUT --
+motCompMask: an estimate of the new motion mask. This is the motion mask of the previous iteration, compensated with estimated motion (same motion vectors of actual detected motion in previous iteration).
+fgMask: current foreground mask, updated by backgroundSubstraction. @see backgroundSubstraction
+*useForegroundFeatures: boolean, default true, ...
+-- OUTPUT --
+*combinedMask: bitwise OR combination of fgMask and motCompMask. Converted to array goodFeaturesToTrack.
+goodFeaturesToTrack: array of two float points, which are points of interest for the optical flow algorithm. @see calcOpticalFlowPyrLK
+-- BODY METHOD CALLS --
+...
+
+-- TODO --
+>>useForegroundFeatures verwijderen, is onduidelijk hoe goodFeaturesToTrack de plaats inneemt indien leeg?
+
+-- opticalFlow --
+-- INPUT --
+prvFr: previous frame in image sequence for optical flow.  @see calcOpticalFlowPyrLK
+nxtFr: next/current frame in image sequence for optical flow.  @see calcOpticalFlowPyrLK
+prvPts: array of two float points. This is a list of points of interest for the optical flow algorithm. For each of these points (and these only) a motion vector is estimated, so these points will be the source points of the motio vectors as well. @see calcOpticalFlowPyrLK
+fgMask: the foreground mask of the next/current frame.
+-- OUTPUT --
+*optFlow: A copy of nxtFr with a representation of the motion vectors painted on top.
+status: array of uchar values, indicating the status of the motion vector at the corresponding index in prvPts and nxtPts. @see calcOpticalFlowPyrLK
+nxtPts: array of two float points, which are the end points for the motion vectors. @see calcOpticalFlowPyrLK
+-- BODY METHOD CALLS --
+/
+
+
+-- optFlowRegularization --
+-- INPUT --
+...
+-- OUTPUT --
+...
+-- BODY METHOD CALLS --
+...
+
+
+-- morphologicalReconstruction --
+-- INPUT --
+...
+-- OUTPUT --
+...
+-- BODY METHOD CALLS --
+...
+
+
+-- expandPatches --
+-- INPUT --
+...
+-- OUTPUT --
+...
+-- BODY METHOD CALLS --
+...
+
+
+-- postProcessing --
+-- INPUT --
+...
+-- OUTPUT --
+...
+-- BODY METHOD CALLS --
+...
+
+
+-- regularizeData --
+-- INPUT --
+...
+-- OUTPUT --
+...
+-- BODY METHOD CALLS --
+...
+
+
+-- motionCompensation --
+-- INPUT --
+...
+-- OUTPUT --
+...
+-- BODY METHOD CALLS --
+...
