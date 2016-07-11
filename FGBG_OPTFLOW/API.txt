@@ -49,7 +49,8 @@ Dus eigenlijk moet motionMask eerst nog compenseerd worden voor gedetecteerde be
 vervolgens dat resultaat in motCompMask nog eens compenseren voor geschatte beweging tussen nxtFrame en daaropvolgende frame.
 
 
--- backgroundSubstraction --
+--- backgroundSubstraction ---
+Performs background subtraction on the given frame with the given MOG2 model. Results in a foreground mask for that frame.
 -- INPUT --
 frame: the next frame to update the background subtraction with.
 MOG2: pointer to the MOG2  (Mixture of Gaussians) background subtraction object (OpenCV).
@@ -59,7 +60,8 @@ fgMask: the updated foreground mask returned by MOG2.
 /
 
 
--- getOptFlowFeatures --
+--- getOptFlowFeatures ---
+Estimates which pixel are good features to track for the optical flow algorithm. Estimated pixels are a combination of the current foreground mask and a motion compensated motion mask of the previous iteration.
 -- INPUT --
 motCompMask: an estimate of the new motion mask. This is the motion mask of the previous iteration, compensated with estimated motion (same motion vectors of actual detected motion in previous iteration).
 fgMask: current foreground mask, updated by backgroundSubstraction. @see backgroundSubstraction
@@ -73,7 +75,8 @@ goodFeaturesToTrack: array of two float points, which are points of interest for
 -- TODO --
 >>useForegroundFeatures verwijderen, is onduidelijk hoe goodFeaturesToTrack de plaats inneemt indien leeg?
 
--- opticalFlow --
+--- opticalFlow ---
+Calculates optical flow for the given points of interest prvPts of prvFr to nxtFr. Results in an array nxtPts which, together with prvPts, shows the motion vectors.
 -- INPUT --
 prvFr: previous frame in image sequence for optical flow.  @see calcOpticalFlowPyrLK
 nxtFr: next/current frame in image sequence for optical flow.  @see calcOpticalFlowPyrLK
@@ -87,7 +90,7 @@ nxtPts: array of two float points, which are the end points for the motion vecto
 /
 
 
--- optFlowRegularization --
+--- optFlowRegularization ---
 -- INPUT --
 ...
 -- OUTPUT --
@@ -96,7 +99,7 @@ nxtPts: array of two float points, which are the end points for the motion vecto
 ...
 
 
--- morphologicalReconstruction --
+--- morphologicalReconstruction ---
 -- INPUT --
 ...
 -- OUTPUT --
@@ -105,7 +108,7 @@ nxtPts: array of two float points, which are the end points for the motion vecto
 ...
 
 
--- expandPatches --
+--- expandPatches ---
 -- INPUT --
 ...
 -- OUTPUT --
@@ -114,7 +117,7 @@ nxtPts: array of two float points, which are the end points for the motion vecto
 ...
 
 
--- postProcessing --
+--- postProcessing ---
 -- INPUT --
 ...
 -- OUTPUT --
@@ -123,7 +126,7 @@ nxtPts: array of two float points, which are the end points for the motion vecto
 ...
 
 
--- regularizeData --
+--- regularizeData ---
 -- INPUT --
 ...
 -- OUTPUT --
@@ -132,7 +135,7 @@ nxtPts: array of two float points, which are the end points for the motion vecto
 ...
 
 
--- motionCompensation --
+--- motionCompensation ---
 -- INPUT --
 ...
 -- OUTPUT --
