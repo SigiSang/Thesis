@@ -1,0 +1,19 @@
+motionDetection
+	backgroundSubstraction
+	getOptFlowFeatures
+		binMat2Vec
+	opticalFlow
+	optFlowRegularization
+		similarNeighbourWeighting
+		threshold
+	(
+	morphologicalReconstruction
+		threshold
+	)OR(
+	expandMarker
+		expandByList
+	)
+	postProcessing
+	regularizeData
+		regularizeDataByList
+	applyMotion

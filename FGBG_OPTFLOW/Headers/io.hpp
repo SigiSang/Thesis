@@ -21,7 +21,7 @@ namespace io {
 	/** Shown image properties and helper values **/
 	int imX=5,imY=5
 		,shownImages=0
-		,consecutiveImages=3
+		,consecutiveImages=6
 		,normalXSize=320
 		,normalYSize=261;
 
@@ -119,14 +119,20 @@ namespace io {
 	    cout<<"F: "<<F<<"%"<<endl;
 	}
 
+	/*
+	* Show overlap between two binary/grayscale images, resulting in an BGR image.
+	* The first image is loaded into the green layer of the resulting image.
+	* The second image is loaded into the red layer of the resulting image.
+	* Overlap is colored to yellow.
+	*/
 	void showMaskOverlap(const Mat& m1, string strM1, const Mat& m2, string strM2){
 		Mat dst,emptyMat = Mat::zeros(m1.size(),m1.type());
 		vector<Mat> mv;
 		mv.push_back(emptyMat);
-		mv.push_back(m1);
-		mv.push_back(m2);
+		mv.push_back(m1); // green layer
+		mv.push_back(m2); // red layer
 		merge(mv,dst);
-		showImage(string(strM1+" vs "+strM2),dst);
+		showImage(string(strM1+" vs "+strM2),dst,true);
 	}
 }
 

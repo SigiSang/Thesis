@@ -18,9 +18,9 @@ typedef Vec<short,3> DataVec;
 
 const int ESCAPE_NL = 537919515;
 const int ESCAPE_EN = 1048603;
-const double PI = 3.14159265358979323846;
 const string dirOutput = "output";
 
+/* Unused */
 template <typename T>
 void printHistogram(ostream& os, vector<T>& hist, string name){
 	os<<"--- Histogram for "<<name<<" ---"<<endl;
@@ -55,6 +55,7 @@ void _histogram(const Mat& src, vector<int>& hist, int numBins, int maxVal) {
     }
 }
 
+/* Unused */
 /* Wrapper function for histogram_ */
 /* Based on code from https://github.com/bytefish/opencv/tree/master/lbp */
 void histogram(const Mat& src, vector<int>& hist, int numBins, int maxVal) {
@@ -97,14 +98,15 @@ void addNoise(Mat& src, Mat& dst){
 	addWeighted(src,1,noise,0.3,0,dst);
 }
 
-void threshold(const Mat& img,Mat& dst,double threshval=-1){
+void threshold(const Mat& src,Mat& dst,double threshval=-1){
 	double maxval = 255;
 	int type = CV_THRESH_BINARY;
 	if(threshval==-1) type += CV_THRESH_OTSU;
-	threshold(img,dst,threshval,maxval,type);
+	threshold(src,dst,threshval,maxval,type);
 	// postProcessing(dst,dst,3);
 }
 
+/* Unused */
 void imageSmoothing(Mat& src, Mat& dst){
 	int d = 9; // Neighbour max distance, 5 for real-time, 9 for offline with heavy noise
 	double sigmaColor, sigmaSpace;
@@ -123,12 +125,12 @@ void binMat2Vec(const Mat& src, vector<Point2f>& pts){
 }
 
 void checkRegulData(const Mat& mask, const Mat& regulData){
-	Mat regulMask = Mat::zeros(mask.size(),mask.type());
+	Mat regulMask = Mat::zeros(mask.size(),mask.type()); // will get high values if pixel is sourcepoint for motion vector in regulData
     const int width=mask.cols, height=mask.rows;
     for(int x=0;x<width;x++){
     for(int y=0;y<height;y++){
-    	DataVec dv = regulData.at<DataVec>(y*width+x);
-    	if(dv[1]!=0 || dv[2]!=0){
+    	DataVec dv = regulData.at<DataVec>(y*width+x); // relative motion vector representation
+    	if(dv[1]!=0 || dv[2]!=0){ // relative motion vector is non-zero
     		regulMask.at<uchar>(y,x) = -1;
     	}
     }
@@ -161,6 +163,7 @@ void getOptFlowFeatures(const Mat& motCompMask, const Mat& fgMask, Mat& combined
 	 	goodFeaturesToTrack.clear();
 }
 
+// TODO When performing optical flow on the entire frames (all pixels) instead of goodFeatureToTrack, consider using a larger winSize
 void opticalFlow(const Mat& prvFr, const Mat& nxtFr, Mat& optFlow, vector<uchar>& status, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& fgMask){
 	TermCriteria termcrit(TermCriteria::COUNT|TermCriteria::EPS,20,0.03);
     Size winSize(21,21);
@@ -192,6 +195,10 @@ void opticalFlow(const Mat& prvFr, const Mat& nxtFr, Mat& optFlow, vector<uchar>
 
 void similarNeighbourWeighting(const Mat& data, Mat& weights){
 	short r = 1; //Radius
+	// windowWidth = 2r+1
+	// maxNeighbours = windowWidth²-1 = 4r²+4r = 4r(r+1)
+	// maxWeight = 2^(maxNeighbours) - 1
+	float maxWeight = (1<<(4*r*(r+1)))-1;
 	for(int x=0;x<data.cols;x++){
 	for(int y=0;y<data.rows;y++){
 		short neighbours = 0;
@@ -202,16 +209,9 @@ void similarNeighbourWeighting(const Mat& data, Mat& weights){
 			if(x+i>0 && x+i < data.cols){
 				for(int j=-1; j<=r; j+=r){
 				if(!(i==0 && j==0) && y+j>0 && y+j < data.rows){
-					/**/
 					if(deltaX == data.at<DataVec>(y+j,x+i)[1]
 						&&
 						deltaY == data.at<DataVec>(y+j,x+i)[2]){
-					/**
-					int margin = 1;
-					if(deltaX-margin <= data.at<DataVec>(y+j,x+i)[1] && data.at<DataVec>(y+j,x+i)[1] < deltaX+margin
-						&&
-						deltaY-margin <= data.at<DataVec>(y+j,x+i)[2] && data.at<DataVec>(y+j,x+i)[2] < deltaY+margin){
-					/**/
 						neighbours++;
 					}
 				}
@@ -219,16 +219,16 @@ void similarNeighbourWeighting(const Mat& data, Mat& weights){
 			}
 			}
 		}
-		float weight = ((1<<neighbours)-1)/255;
+		float weight = ((1<<neighbours)-1)/maxWeight;
 		weights.at<float>(y,x) = weight;
 	}
 	}
 }
 
-void optFlowRegularization(const Mat& src, Mat& dst, vector<uchar>& status, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& weights, Mat& data){
+void optFlowRegularization(const Size& size, Mat& dst, vector<uchar>& status, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& weights, Mat& data){
 
-    data = Mat::zeros(src.size(),CV_16UC3);
-	weights = Mat::zeros(src.size(),CV_32FC1);
+    data = Mat::zeros(size,CV_16UC3);
+	weights = Mat::zeros(size,CV_32FC1);
 
 	// Optical flow to data
     for(int ptsIdx=0;ptsIdx<status.size();ptsIdx++){
@@ -247,18 +247,18 @@ void optFlowRegularization(const Mat& src, Mat& dst, vector<uchar>& status, vect
     // Weighting for regularization
 	similarNeighbourWeighting(data,weights);
 
-    dst = Mat::ones(weights.size(),CV_8UC1);
+    dst = Mat::ones(size,CV_8UC1);
     weights.convertTo(dst,CV_8UC1,255);
    	threshold(dst,dst,127);
 }
 
-void expandByList(const Mat& mask, Mat& minorMask, vector<bool>& expanded, vector<int> toExpand, ushort deltaX, ushort deltaY){
+void expandByList(const Mat& mask, Mat& marker, vector<bool>& expanded, vector<int> toExpand, ushort deltaX, ushort deltaY){
     const int width=mask.cols, height=mask.rows, r=2;
 	for(int i=0; i<toExpand.size();i++){
     	int idx = toExpand[i];
     	if(!expanded[idx]){
     		expanded[idx] = true;
-    		minorMask.at<uchar>(idx)=(uchar)(-1); // Max value
+    		marker.at<uchar>(idx)=(uchar)(-1); // Max value
 			for(int i=-r; i<=r; i++){
 			for(int j=-r; j<=r; j++){
 				int idxNb = idx+j*width+i;
@@ -273,12 +273,12 @@ void expandByList(const Mat& mask, Mat& minorMask, vector<bool>& expanded, vecto
 	}
 }
 
-void expandPatches(const Mat& mask, const Mat& data, Mat& minorMask){
+void expandMarker(const Mat& mask, const Mat& data, Mat& marker){
     const int width=mask.cols, height=mask.rows;
    	vector<bool> expanded(width*height,false);
     for(int x=0;x<width;x++){
     for(int y=0;y<height;y++){
-    	if((int)(minorMask.at<uchar>(y,x))>127){
+    	if((int)(marker.at<uchar>(y,x))>127){
     		int idx = y*width+x;
 	    	if(!expanded[idx]){
 				vector<int> toExpand;
@@ -286,26 +286,26 @@ void expandPatches(const Mat& mask, const Mat& data, Mat& minorMask){
 				short deltaY = data.at<DataVec>(y,x)[2];
 
 				toExpand.push_back(idx);
-				expandByList(mask,minorMask,expanded,toExpand,deltaX,deltaY);
+				expandByList(mask,marker,expanded,toExpand,deltaX,deltaY);
 	    	}
 	    }
     }
     }
 }
 
-void morphologicalReconstruction(Mat& dst, const Mat& majorMask, const Mat& minorMask){
+void morphologicalReconstruction(Mat& dst, const Mat& mask, const Mat& marker){
    	Mat dilation,maskedDilation,prevMaskedDilation;
    	bool hasChanged;
    	int strucSize = 7;
    	int numOfIterations = 0;
 	Mat struc = getStructuringElement(MORPH_ELLIPSE,Size(strucSize,strucSize));
     // TODO Change threshold value to variable
-   	threshold(minorMask,maskedDilation,127);
+   	threshold(marker,maskedDilation,127);
    	do{
    		numOfIterations++;
    		maskedDilation.copyTo(prevMaskedDilation);
    		dilate(prevMaskedDilation,dilation,struc);
-   		min(dilation,majorMask,maskedDilation);
+   		min(dilation,mask,maskedDilation);
    		hasChanged = (countNonZero(maskedDilation!=prevMaskedDilation) != 0);
    	}while(hasChanged);
    	// cout<<"Morph Reconstr Iterations: "<<numOfIterations<<endl;
@@ -333,13 +333,13 @@ void regularizeDataByList(const Mat& mask, vector<bool>& expanded, vector<int> t
 	}
 }
 
-void regularizeData(const Mat& mask, const Mat& data, Mat& regulData){
-    const int width=mask.cols, height=mask.rows;
+void regularizeData(const Mat& marker, const Mat& mask, const Mat& data, Mat& regulData){
+    const int width=marker.cols, height=marker.rows;
     regulData = Mat::zeros(data.size(),data.type());
    	vector<bool> expanded(width*height,false);
     for(int x=0;x<width;x++){
     for(int y=0;y<height;y++){
-    	if((short)(mask.at<uchar>(y,x))>0){
+    	if((short)(marker.at<uchar>(y,x))>0){
     		int idx = y*width+x;
 	    	if(!expanded[idx]){
 				vector<int> toExpand;
@@ -355,22 +355,39 @@ void regularizeData(const Mat& mask, const Mat& data, Mat& regulData){
     // checkRegulData(mask,regulData);
 }
 
-void motionCompensation(const Mat& motionMask, Mat& motCompMask, const Mat& data){
-    const int width=motionMask.cols, height=motionMask.rows;
-    motCompMask = Mat::zeros(motionMask.size(),motionMask.type());
+void applyMotion(const Mat& src, const Mat& regulData, Mat& dst){
+    const int width=src.cols, height=src.rows;
+    dst = Mat::zeros(src.size(),src.type());
+
     for(int x=0;x<width;x++){
     for(int y=0;y<height;y++){
-    	if((short)(motionMask.at<uchar>(y,x))>0){
-			short newX = x + data.at<DataVec>(y,x)[1];
-			short newY = y + data.at<DataVec>(y,x)[2];
-			if(newX >= 0 && newY >= 0 && newX <= width && newY <= height){
-    			motCompMask.at<uchar>(newY,newX) = motionMask.at<uchar>(y,x);
-			}
+    	if((short)(src.at<uchar>(y,x))>0){
+			short newX = x + regulData.at<DataVec>(y,x)[1];
+			short newY = y + regulData.at<DataVec>(y,x)[2];
+			if(newX >= 0 && newY >= 0 && newX < width && newY < height)
+				dst.at<uchar>(newY,newX) = (uchar)(-1);
     	}
     }
 	}
-    // io::showMaskOverlap(motionMask,"Mask",motCompMask,"Motion Compensated Mask");
 }
+
+// TODO nu code zelfde als applyMotion. Motion vectors zitten nu in 'data' op coordinaten van pixels in prvFrame (dus volgens motionMask). Voor eenvoudig toepassen moet voor elke pixel in motionMask 2 keer de verplaatsing toegepast worden, om te stroken met informatie in 'data'. Of in applyMotion een Mat& postMotionData meegeven om de data ook te verplaatsen, en vervolgens applyMotion nog eens uit te voeren voor motion compensation.
+// void motionCompensation(const Mat& motionMask, Mat& motCompMask, const Mat& data){
+//     const int width=motionMask.cols, height=motionMask.rows;
+//     motCompMask = Mat::zeros(motionMask.size(),motionMask.type());
+//     for(int x=0;x<width;x++){
+//     for(int y=0;y<height;y++){
+//     	if((short)(motionMask.at<uchar>(y,x))>0){
+// 			short newX = x + data.at<DataVec>(y,x)[1];
+// 			short newY = y + data.at<DataVec>(y,x)[2];
+// 			if(newX >= 0 && newY >= 0 && newX < width && newY < height){
+//     			motCompMask.at<uchar>(newY,newX) = motionMask.at<uchar>(y,x);
+// 			}
+//     	}
+//     }
+// 	}
+//     io::showMaskOverlap(motionMask,"Mask",motCompMask,"Motion Compensated Mask");
+// }
 
 void motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motionMask, Ptr<BackgroundSubtractor> pMOG2, string name, bool onlyUpdateBGModel, bool useRegExpansion, bool showSrc=true, bool useForegroundFeatures=true){
 	bool secondIter = false;
@@ -378,7 +395,7 @@ void motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motionMask, 
 	vector<uchar> status;
 	vector<Point2f> prvPts,nxtPts;
 	Mat data, regulData;
-	Mat fgMask,combMask,maskReg,weights,optFlow1,optFlow2;
+	Mat fgMask,combMask,maskReg,weights,optFlow1,optFlow2,postMotionMask;
 
 	backgroundSubtraction(prvFr,fgMask,pMOG2);
 
@@ -386,7 +403,7 @@ void motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motionMask, 
 
 		getOptFlowFeatures(motCompMask,fgMask,combMask,prvPts,useForegroundFeatures);
 		opticalFlow(prvFr,nxtFr,optFlow1,status,prvPts,nxtPts,fgMask);
-		optFlowRegularization(prvFr,maskReg,status,prvPts,nxtPts,weights,data);
+		optFlowRegularization(prvFr.size(),maskReg,status,prvPts,nxtPts,weights,data);
 
 		motionMask = Mat::zeros(prvFr.size(),CV_8UC1);
 		/**/
@@ -400,7 +417,7 @@ void motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motionMask, 
 		   	// Mat maskMorph,maskExp;
 		   	// morphologicalReconstruction(maskMorph,fgMask,maskReg);
 		   	maskReg.copyTo(motionMask);
-		   	expandPatches(fgMask,data,motionMask);
+		   	expandMarker(fgMask,data,motionMask);
 		 //   	for(int x=0;x<maskMorph.cols;x++){
 		 //   	for(int y=0;y<maskMorph.rows;y++){
 		 //   		if(maskMorph.at<uchar>(y,x) > threshold
@@ -416,9 +433,9 @@ void motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motionMask, 
 		// Mat maskMorph,maskExp;
 		// morphologicalReconstruction(maskMorph,fgMask,maskReg);
 		// maskReg.copyTo(maskExp);
-		// expandPatches(fgMask,data,maskExp);
+		// expandMarker(fgMask,data,maskExp);
 		// io::calculateScores(maskMorph,maskExp);
-	    // io::showMaskOverlap(maskMorph,"Morph",maskExp,"Exp");
+	 //    io::showMaskOverlap(maskMorph,"Morph",maskExp,"Exp");
 
 		// maskMorph.copyTo(motionMask);
 
@@ -427,13 +444,14 @@ void motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motionMask, 
 		// morphologyEx(motionMask,motionMask,MORPH_CLOSE,struc);
 	   	postProcessing(motionMask,motionMask,3,MORPH_CLOSE);
 
-		// TODO create regularized data (same motion vector per region)
-	   	regularizeData(motionMask,data,regulData);
+	   	regularizeData(maskReg,motionMask,data,regulData);
 
-		motionCompensation(motionMask,motCompMask,regulData);
+	   	applyMotion(motionMask,regulData,postMotionMask);
+	   	
+		// motionCompensation(motionMask,motCompMask,regulData);
 
 		bool resize = true;
-	   	/**
+	   	/**/
 		if(showSrc) io::showImage(name+" Src",nxtFr,resize);
 		io::showImage(name+" Foreground Mask",fgMask,resize);
 		// io::showImage(name+" Comb Mask",combMask,resize);
@@ -444,6 +462,7 @@ void motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motionMask, 
 		if(secondIter) io::showImage(name+" OptFlow2",optFlow2,resize);
 		/**/
 		io::showImage(name+" MotionMask",motionMask,resize);
+    	io::showMaskOverlap(motionMask,name+" MotionMask",postMotionMask,"PostMotionMask");
 	}
 }
 
@@ -452,7 +471,7 @@ int main (int argc, char** argv){
 	char buffer[30];
 
 	// string dirInput = "input/streetcorner/"; int skipToFrame = 150;
-	string dirInput = "input/tramStation/"; int skipToFrame = 190;//93;
+	string dirInput = "input/tramStation/"; int skipToFrame = 0; //93;
 	// string dirInput = "input/blizzard/"; int skipToFrame = 30;
 	// string dirInput = "input/pedestrians/"; int skipToFrame = 30;
 	string regexGt = "groundtruth/%06d.png";
@@ -527,28 +546,29 @@ int main (int argc, char** argv){
 			cout<<endl;
 		}
 
-		// Use morphological reconstruction followed by region expansion
-		motionDetection(prvFr,nxtFr,motCompMask,motionMask,pMOG2Exp,name+" Exp",onlyUpdateBGModel,true);
-		motionDetection(prvFrNoisy,nxtFrNoisy,motCompMaskNoisy,motionMaskNoisy,pMOG2NoisyExp,nameNoisy+" Exp",onlyUpdateBGModel,true);
+		// Use region expansion
+		// motionDetection(prvFr,nxtFr,motCompMask,motionMask,pMOG2Exp,name+" Exp",onlyUpdateBGModel,true);
+		// motionDetection(prvFrNoisy,nxtFrNoisy,motCompMaskNoisy,motionMaskNoisy,pMOG2NoisyExp,nameNoisy+" Exp",onlyUpdateBGModel,true);
 
+		// if(!onlyUpdateBGModel){
+		// 	Mat motMaskROI,motMaskROINoisy;
+		// 	bitwise_and(motionMask,ROI,motMaskROI);
+		// 	bitwise_and(motionMaskNoisy,ROI,motMaskROINoisy);
+
+	 //    	cout<<"Frame "<<frameIdx<<", with Exp"<<endl;
+	 //  //   	cout<<"Comp full inter: ";
+		// 	// io::calculateScores(motionMask,motionMaskNoisy);
+	 //    	cout<<"Comp ROI gt-normal: ";
+		// 	io::calculateScores(nxtGt,motionMask);
+	 //    	cout<<"Comp ROI gt-noisy: ";
+		// 	io::calculateScores(nxtGt,motionMaskNoisy);
+		// 	cout<<endl;
+		// }
+		
 		if(!onlyUpdateBGModel){
-			Mat motMaskROI,motMaskROINoisy;
-			bitwise_and(motionMask,ROI,motMaskROI);
-			bitwise_and(motionMaskNoisy,ROI,motMaskROINoisy);
-
-	    	cout<<"Frame "<<frameIdx<<", with Exp"<<endl;
-	  //   	cout<<"Comp full inter: ";
-			// io::calculateScores(motionMask,motionMaskNoisy);
-	    	cout<<"Comp ROI gt-normal: ";
-			io::calculateScores(nxtGt,motionMask);
-	    	cout<<"Comp ROI gt-noisy: ";
-			io::calculateScores(nxtGt,motionMaskNoisy);
-			cout<<endl;
-		}
-
-		if(!onlyUpdateBGModel){
-			if((keyboard=waitKey(0)) == ESCAPE_NL || keyboard == ESCAPE_EN)
+			if((keyboard=waitKey(0)) == ESCAPE_NL || keyboard == ESCAPE_EN){
 				stop();
+			}
 		}
 		nxtFr.copyTo(prvFr);
 	}

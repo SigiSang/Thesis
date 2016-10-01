@@ -9,25 +9,30 @@ While there is a next frame:
 
 
 --- motionDetection ---
+Detects motion by performing a chain of techniques on two consecutive frames.
+Detected motion is returned in motionMask.
+An estimate of the next motionMask (result of the second frame and the unkown third frame) is returned in motCompMask.
+	-- TODO--
+	...
 -- INPUT --
 prvFrame: previous frame in image sequence for motion detection
 nxtFrame: next/current frame in image sequence for motion detection
 MOG2: Mixture of Gaussians 2 BackgroundSubstractor
 -- OUTPUT --
-motionMask: motion mask for nxtFrame, detected moving pixels between prvFrame and nxtFrame  -->(implemantatie niet correct! Zie TODO)
-motCompMask: motion compensated mask using motionMask and regularized motion vectors, estimate of moving pixels in frame after nxtFrame.
+motionMask: motion mask for prvFrame, pixels detected moving between prvFrame and nxtFrame
+postMotionMask: motion mask for nxtFrame, pixels detected moving between prvFrame and nxtFrame. Constructed by applying the regularized motion vectors on motionMask.
+	// motCompMask: motion compensated mask using postMotionMask and regularized motion vectors, estimate of moving pixels in frame after nxtFrame.
 -- VARIABLES --
 status: array of unsigned chars, contains result of optical flow. Contains optical flow result status for every element in the frame (matrix). @see calcOpticalFlowPyrLK
-prvPts: array of points (2D float coordinates). Source points of motion vectors from optical flow, coordinates for pixels in prvFrame. @see calcOpticalFlowPyrLK
-nxtPts: array of points (2D float coordinates). End points of motion vectors from optical flow, coordinates for pixels in nxtFrame. @see calcOpticalFlowPyrLK
-data: matrix, containing an array of four values per pixel of prvFrame. Such an array is a different representation of the motion vector at the corresponding pixel, from optical flow results. Used for regularization of motion vectors. @see optFlowRegularization
+prvPts: array of points (2D float coordinates), which are the sourcepoints of motion vectors from optical flow, coordinates for pixels in prvFrame. @see calcOpticalFlowPyrLK
+nxtPts: array of points (2D float coordinates), which are the endpoints of motion vectors from optical flow, coordinates for pixels in nxtFrame. @see calcOpticalFlowPyrLK
+data: matrix, containing an array of four values per pixel of prvFrame. Such an array is a different representation of the motion vector at the corresponding pixel, based on optical flow results. Used for regularization of motion vectors. @see optFlowRegularization
 regulData: same structure as data, contains data representing regularized motion vectors. @see regularizeData
 fgMask: foreground mask, result from background subtraction. @see backgroundSubtraction
 *combMask: bitwise OR combination of fgMask and motCompMask. @see getOptFlowFeatures
-weights: matrix of weights per pixel of the frame. Each weight is a continuous value for whether or not the pixel is moving..
+weights: matrix of weights per pixel of the frame. Each weight is a continuous value for whether or not the pixel is moving. @see similarNeighbourWeighting
 *maskReg: motion mask after initial data regularization (threshold based on weights of motion vectors). Input for morphological reconstruction.	@see optFlowRegularization (dst), morphologicalReconstruction
 *optFlow: OpenCV Mat, copy of nxtFrame with representation of motion vectors painted over. Motion vectors are shown as resulted from calcOpticalFlowPyrLK (OpenCV). @see opticalFlow
-
 -- BODY METHOD CALLS --
 backgroundSubstraction(prvFrame,fgMask,MOG2)
 getOptFlowFeatures(motCompMask,fgMask,combMask,prvPts,useForegroundFeatures)
@@ -36,17 +41,13 @@ optFlowRegularization(prvFr,maskReg,status,prvPts,nxtPts,weights,data)
 {
 	morphologicalReconstruction(motionMask,fgMask,maskReg)
 	OR
-	expandPatches(fgMask,data,motionMask)
+	expandMarker(fgMask,data,motionMask)
 	//Similar results
 }
 postProcessing(motionMask,MORPH_CLOSE)
 regularizeData(motionMask,data,regulData)
-motionCompensation(motionMask,motCompMask,regulData)
-
--- TODO --
->>motionMask is nu bewogen pixels in prvFrame en motCompMask bewegende pixels in nxtFrame.
-Dus eigenlijk moet motionMask eerst nog compenseerd worden voor gedetecteerde beweging tussen prvFrame en nxtFrame,
-vervolgens dat resultaat in motCompMask nog eens compenseren voor geschatte beweging tussen nxtFrame en daaropvolgende frame.
+applyMotion(motionMask,regulData,postMotionMask)
+		// motionCompensation(motionMask,motCompMask,regulData);
 
 
 --- backgroundSubstraction ---
@@ -56,12 +57,14 @@ frame: the next frame to update the background subtraction with.
 MOG2: pointer to the MOG2  (Mixture of Gaussians) background subtraction object (OpenCV).
 -- OUTPUT --
 fgMask: the updated foreground mask returned by MOG2.
+-- VARIABLES --
+learingRate: learing rate for the background subtraction model, set to default value. @see BackgroundSubtractor.apply
 -- BODY METHOD CALLS --
 /
 
 
 --- getOptFlowFeatures ---
-Estimates which pixel are good features to track for the optical flow algorithm. Estimated pixels are a combination of the current foreground mask and a motion compensated motion mask of the previous iteration.
+Estimates which pixels are good features to track for the optical flow algorithm. Estimated pixels ('good features') are a combination of the current foreground mask and a motion compensated motion mask of the previous iteration.
 -- INPUT --
 motCompMask: an estimate of the new motion mask. This is the motion mask of the previous iteration, compensated with estimated motion (same motion vectors of actual detected motion in previous iteration).
 fgMask: current foreground mask, updated by backgroundSubstraction. @see backgroundSubstraction
@@ -69,76 +72,221 @@ fgMask: current foreground mask, updated by backgroundSubstraction. @see backgro
 -- OUTPUT --
 *combinedMask: bitwise OR combination of fgMask and motCompMask. Converted to array goodFeaturesToTrack.
 goodFeaturesToTrack: array of two float points, which are points of interest for the optical flow algorithm. @see calcOpticalFlowPyrLK
+-- VARIABLES --
+width: width of motCompMask
+height: height of motCompMask
 -- BODY METHOD CALLS --
-...
-
+binMat2Vec(combinedMask,goodFeaturesToTrack)
 -- TODO --
->>useForegroundFeatures verwijderen, is onduidelijk hoe goodFeaturesToTrack de plaats inneemt indien leeg?
+>>useForegroundFeatures verwijderen, is onduidelijk hoe goodFeaturesToTrack de plaats inneemt indien leeg? Wss verplaatsen naar @see opticalFlow
+
 
 --- opticalFlow ---
 Calculates optical flow for the given points of interest prvPts of prvFr to nxtFr. Results in an array nxtPts which, together with prvPts, shows the motion vectors.
 -- INPUT --
 prvFr: previous frame in image sequence for optical flow.  @see calcOpticalFlowPyrLK
 nxtFr: next/current frame in image sequence for optical flow.  @see calcOpticalFlowPyrLK
-prvPts: array of two float points. This is a list of points of interest for the optical flow algorithm. For each of these points (and these only) a motion vector is estimated, so these points will be the source points of the motio vectors as well. @see calcOpticalFlowPyrLK
+prvPts: array of two float points. This is a list of points of interest for the optical flow algorithm. For each of these points (and these only) a motion vector is estimated, so these points will be the source points of the motion vectors as well. @see calcOpticalFlowPyrLK
 fgMask: the foreground mask of the next/current frame.
 -- OUTPUT --
 *optFlow: A copy of nxtFr with a representation of the motion vectors painted on top.
 status: array of uchar values, indicating the status of the motion vector at the corresponding index in prvPts and nxtPts. @see calcOpticalFlowPyrLK
 nxtPts: array of two float points, which are the end points for the motion vectors. @see calcOpticalFlowPyrLK
+-- VARIABLES --
+termcrit: specifies the termination criteria of the iterative search algorithm of calcOpticalFlowPyrLK. @see calcOpticalFlowPyrLK
+winSize: size of the searchwindow for motion vectors of a pixel. @see calcOpticalFlowPyrLK
+width: width of prvFr
+height: height of prvFr
+err: array of floats, required for calcOpticalFlowPyrLK. @see calcOpticalFlowPyrLK
+red,blue,green: OpenCV Scalar objects representing the color as suggested by name of the variable. Used when drawing motion vectors on optFlow.
 -- BODY METHOD CALLS --
 /
 
 
 --- optFlowRegularization ---
+Regularizes optical flow results by means of 'similar neighbour weighting'. Results in a motion mask where a pixel has a high value when it has a motion vector and sufficient neighbouring pixels have the same (size and direction) motion vector.
 -- INPUT --
-...
+size: the size of the frame on which optical flow was performed.
+status: array of unsigned chars, contains result of optical flow. Contains optical flow result status for every element in the frame (matrix), value shows whether or not a motion vector was succesfully estimated for the pixel with corresponding index. @see calcOpticalFlowPyrLK
+prvPts: array of points (2D float coordinates), which are the sourcepoints of motion vectors from optical flow. @see calcOpticalFlowPyrLK
+nxtPts: array of points (2D float coordinates) which are the endpoints of motion vectors from optical flow. @see calcOpticalFlowPyrLK
 -- OUTPUT --
-...
+dst: the motion mask resulted from thresholding the weights matrix.
+*weights: matrix of weights per pixel of the frame. Each weight is a continuous value for whether or not the pixel is moving. @see similarNeighbourWeighting
+data: matrix, containing an array of four values per pixel of the frame. Such an array is a different representation of the motion vector at the corresponding pixel, the motion vector which resulted from optical flow.
+-- VARIABLES --
+x1: x-coordinate of the motion vector sourcepoint of the current for-iteration
+y1: y-coordinate of the motion vector sourcepoint of the current for-iteration
+x2: x-coordinate of the motion vector endpoint of the current for-iteration
+y2: y-coordinate of the motion vector endpoint of the current for-iteration
+deltaX: the difference of x2 and x1, indicating relative size and direction along the x-axis
+deltaY: the difference of y2 and y1, indicating relative size and direction along the y-axis
+	Together, deltaX and deltaY are the relative representation of the motion vector originating from the current pixel.
 -- BODY METHOD CALLS --
-...
+similarNeighbourWeighting(data,weights)
+threshold(dst,dst,127)
 
 
 --- morphologicalReconstruction ---
+Performs morphological reconstruction on marker, confined by mask. Iterations are run, where marker is dilated within the limits of mask, until the dilated result no longer changes. For dilation a circular structuring element is used.
 -- INPUT --
-...
+mask: limits dilation of the marker. After dilation, the result is cut by performing a bitwise AND between the result and mask.
+marker: the image to reconstruct by dilating it as much as possible, within the limits set by mask.
 -- OUTPUT --
-...
+dst: the resulting mask of the morphological reconstruction.
+-- VARIABLES --
+maskedDilation: the dilation result of the current iteration, cut by mask (bitwise AND).
+prevMaskedDilation: copy of the previous maskedDilation, used to check whether the current dilation has changed. Copied of the beginning of each iteration.
+dilation: the result of a single dilation operation on prevMaskedDilation of the current iteration.
+hasChanged: boolean indicating whether the current dilation has changed in the current iteration. TRUE if maskedDilation matches prevMaskedDilation, FALSE otherwise.
+strucSize: the size of the structuring element used for dilation.
+*numOfIterations: counter for the number of iterations run in the call of this method.
+struc: the structuring element used for dilation.
 -- BODY METHOD CALLS --
-...
+threshold(marker,maskedDilation,127)
 
 
---- expandPatches ---
+--- expandMarker ---
+As an alternative to morphological reconstruction, this method expands all pixels of 'marker' that have a high value. To expand a pixel, the pixel value is set to high in 'marker' and all neighbouring pixels are checked. Each neighbouring pixel within the set radius is to be expanded, if the pixel of 'mask', corresponding to the neighbouring pixel, has a high value. Every pixel is expanded at most once.
 -- INPUT --
-...
+mask: the mask for the expanded result.
+data: optical flow data, for each pixel 'data' contains an array which represents the motion vector for this pixel. @see optFlowRegularization
+marker: the marker to be expanded within 'mask'.
 -- OUTPUT --
-...
+marker: the expanded marker and the result of this method.
+-- VARIABLES --
+width: width of 'mask'
+height: height of 'mask'
+expanded: boolean array, initially all FALSE values. A value is set to TRUE if the pixel at the corresponding array has been expanded.
+idx: when iterating all pixels of 'marker', this is the index of the current pixel.
+toExpand: array of indices of pixels to expand, initially only the index of the current pixel. @see expandByList
+deltaX,deltaY: Together these values are the relative representation of the motion vector originating from the current pixel. Retrieved from 'data' for the current pixel. @see optFlowRegularization
 -- BODY METHOD CALLS --
-...
+expandByList(mask,marker,expanded,toExpand,deltaX,deltaY)
 
 
 --- postProcessing ---
+Performs a morphological operation on src with a circular structuring element.
 -- INPUT --
-...
+src: image to perform the morphological operation on.
+strucSize: size of the structuring element
+morphOp: integer flag for the type of morphological operation to perform. Default MORPH_OPEN @see morphologyEx
 -- OUTPUT --
-...
+dst: the post processing result.
+-- VARIABLES --
+struc: circular structuring element with strucSize.
 -- BODY METHOD CALLS --
-...
+/
 
 
 --- regularizeData ---
+Performs regularization of motion vector data. In the resulting data matrix 'regulData', all pixels with high values in 'mask' have a relative motion vector set in 'regulData'. All pixels adjacent to each other (forming a single blob) share the same relative motion vector. The relative motion vector of every blob is determined by expanding every pixel with a high value in 'marker'. A pixel is expanded in regularizeDataByList with its relative motion vector. @see regularizeDataByList
+-- INPUT --
+marker: the marker to be expanded within 'mask'. Pixels with high values in 'marker' will be expanded using their relative motion vector.
+mask: when expanding a pixel from 'marker' with its relative motion vector, only pixels with a high value in 'mask' can have that relative motion vector set in 'regulData'.
+data: optical flow data, for each pixel 'data' contains an array which represents the motion vector for this pixel, as was determined by the optical flow algorithm. @see optFlowRegularization
+-- OUTPUT --
+regulData: the regularized data matrix.
+-- VARIABLES --
+width: width of 'marker'
+height: height of 'marker'
+expanded: boolean array, initially all FALSE values. A value is set to TRUE if the pixel at the corresponding array has been expanded.
+idx: when iterating all pixels of 'marker', this is the index of the current pixel.
+toExpand: array of indices of pixels to expand, initially only the index of the current pixel. @see regularizeDataByList
+deltaX,deltaY: Together these values are the relative representation of the motion vector originating from the current pixel. Retrieved from 'data' for the current pixel. @see optFlowRegularization 
+-- BODY METHOD CALLS --
+regularizeDataByList(const Mat& mask, vector<bool>& expanded, vector<int> toExpand, Mat& regulData, short deltaX, short deltaY)
+
+
+---- TODO ----
+--- applyMotion ---
+...
 -- INPUT --
 ...
 -- OUTPUT --
+...
+-- VARIABLES --
 ...
 -- BODY METHOD CALLS --
 ...
 
 
---- motionCompensation ---
+--- binMat2Vec ---
+Converts a binary image to a two float point array. This array contains a Point2f object ((y,x) coordinates) for each pixel in src which has a value larger than zero.
 -- INPUT --
-...
+src: binary image to be converted.
 -- OUTPUT --
-...
+pts: array of two float points, result of converting src
+-- VARIABLES --
+/
 -- BODY METHOD CALLS --
-...
+/
+
+
+--- similarNeighbourWeighting ---
+Addresses a weight to each pixel according to the number of neighbours (within radius 1) which have the same relative motion vector. To avoid complexity, only neighbours with the same relative motion vector are counted, so there is no further measurement of similarity. Comparing similarity instead of equality will require making an analysis of the difference in angle combined with the size and the difference in size of the vectors. This implies thourough research and understanding of estimation and decision theory.
+-- INPUT --
+data: data matrix containing the motion vectors to compare.
+-- OUTPUT --
+weights: the weight matrix containing a float value for every pixel (between or equal to 0 and 1). 'weight' is calculated as [(2^neighbours)-1]/maxWeight, with 'neighbours' being the number of neighbouring pixels with the same relative motion vector and maxWeight being the maximum possible weight (relative to the total amount of neighbours a pixel has, which in turn is relative to the radius).
+-- VARIABLES --
+r: the radius (amount of pixels) within which pixels are considered neighbouring.
+neighbours: number of neighbouring pixels with the same relative motion vector.
+deltaX,deltaY: Together these values are the relative representation of the motion vector originating from the current pixel. Retrieved from 'data' for the current pixel. @see optFlowRegularization 
+weight: float value for every pixel (between or equal to 0 and 1)
+-- BODY METHOD CALLS --
+/
+
+
+--- threshold ---
+Wrapper function for the OpenCV threshold function. If the threshval is -1 (default) the type flag CV_THRESH_OTSU is set. The type flag CV_THRESH_BINARY is always set, and maxval is always 255.
+-- INPUT --
+src: the image to threshold
+threshval: the threshold value for the threshold operation. Default -1 which implies Otsu's method will be used to determine a threshold value.
+-- OUTPUT --
+dst: the thresholded image
+-- VARIABLES --
+maxval: the maximum intensity value of the pixels in the image.
+type: flag operator indicating the type of threshold operation.
+-- BODY METHOD CALLS --
+/
+
+
+--- expandByList ---
+Expands all pixels at indexes contained in (the dynamically growing array) 'toExpand'.
+-- INPUT --
+mask: the mask for the expanded result.
+marker: the marker to be expanded within mask.
+expanded: boolean array. A value is set to TRUE if the pixel at the corresponding array has been expanded.
+toExpand: array of indices of pixels to expand, initially contains one index. All indices in the array are iterated to be expanded, indices of qualifying neighbouring pixels are appended. A neighbouring pixel qualifies when the corresponding pixel of mask has a high value.
+deltaX,deltaY: Together these values are the relative representation of the motion vector originating from the current pixel being expanded. @see optFlowRegularization
+-- OUTPUT --
+marker: the expanded marker after expanding all pixels at indexes contained in (the dynamically growing array) 'toExpand'.
+-- VARIABLES --
+width: width of mask
+height: height of mask
+r: radius, maximum number of pixels two pixels can be apart to be considered neighbouring pixels. Applied to both X- and Y-axis.
+idx: the index of the current iteration, retrieved from 'toExpand'
+idxNb: the index of the current pixel being checked, neighbouring to the pixel at 'idx'.
+-- BODY METHOD CALLS --
+/
+
+
+--- regularizeDataByList ---
+Sets the given relative motion vector for all pixels at indexes contained in (the dynamically growing array) 'toExpand'. Initially 'toExpand' contains only one index. For each pixel with an index in toExpand all neighbouring pixels are checked. If a neighbouring pixel hasn't been expanded yet and it has a high value in 'mask', the index of this neighbouring pixel will be appended to 'toExpand'.
+-- INPUT --
+mask: only pixels with a high value in 'mask' can have that relative motion vector set in 'regulData'.
+expanded: boolean array. A value is set to TRUE if the pixel at the corresponding array has been expanded.
+toExpand: array of indices of pixels to expand, initially contains one index. All indices in the array are iterated to be expanded, indices of qualifying neighbouring pixels are appended. A neighbouring pixel qualifies when the corresponding pixel of 'mask' has a high value.
+regulData: the regularized data matrix.
+deltaX,deltaY: Together these values are the relative representation of the motion vector originating from the current pixel being expanded. This motion vector is set in 'regulData' for all qualifying pixels @see optFlowRegularization
+-- OUTPUT --
+regulData: the regularized data matrix with possibly added motion vectors of newly expanded pixels.
+-- VARIABLES --
+width: width of 'mask'
+height: height of 'mask'
+r: radius, maximum number of pixels two pixels can be apart to be considered neighbouring pixels. Applied to both X- and Y-axis.
+idx: the index of the current iteration, retrieved from 'toExpand'
+idxNb: the index of the current pixel being checked, neighbouring to the pixel at 'idx'.
+-- BODY METHOD CALLS --
+/

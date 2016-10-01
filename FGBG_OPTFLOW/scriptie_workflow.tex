@@ -1,0 +1,29 @@
+\section{Introduction}
+In this chapter the framework of the proposed method will be discussed.
+To achieve noise-robust motion detection, several techniques are applied sequentially in order to reduce erroneous results in the motion mask due to heavy noise in the original frames.
+
+The workflow uses only the two latest frames of the image sequence to detect moving pixels, with the exception of background subtraction, which builds a background model using a longer history of frames. This is discussed more thoroughly in \ref{background_subtraction}
+To create an initial estimate of moving pixels, background subtraction is used to produce a foreground mask.
+Due to heavy noise, this foreground mask contains a lot of false-positive and false-negative pixel values.
+To reduce the number of false positives, optical flow and data regularization are performed using the foreground mask and the original frame.
+Performing optical flow on noisy images will produce irregular motion vectors for noisy pixels.
+This is exploited to discern moving pixels from noisy pixels by weighting a pixel according to the number of neighbouring pixels with an equal motion vector.
+Thresholding this weighted matrix results in a new motion mask with a selection of moving pixels, where each group of pixels showed the same motion vector.
+Using morphological reconstruction with this selective motion mask as marker and the foreground mask as mask, regions of moving pixels are expanded to better fit moving objects in the foreground mask, whilst eliminating most of the noisy pixels in the foreground mask, which are part of the static scene.
+At this point, many noisy pixels from the static scene have been removed from the motion mask, but there still are a lot of noisy pixels on the moving objects themselves (false-negatives).
+To remove isolated noisy pixels, simple morphlogical closing is performed on the motion mask.
+
+In the following sections, every part of the framework is discussed in more detail.
+
+\section{Background subtraction}
+\label{background_subtraction}
+
+\section{Optical flow}
+Performing optical flow on the original image results in a data matrix of motion vectors for each pixel.
+Actual moving pixels will typically appear in sizeable groupings with similar motion vectors, whereas noisy pixels will often have a motion vector inconsistent with motion vectors of neighbouring pixels.
+
+\section{Optical flow regularization}
+\subsection{Equal neighbour weighting}
+\subsection{Morphological reconstruction}
+\subsection{Data regularization}
+\section{Post processing}
