@@ -1,0 +1,4 @@
+#!/bin/bash
+project=dataset_test
+cp -f CMakeLists_$project.txt CMakeLists.txt
+openCvCmake $project && ./$project

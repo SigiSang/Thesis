@@ -1,0 +1,22 @@
+#include <iostream>
+#include <algorithm>
+#include "tools.h"
+
+#define ITMAX 1000  // was 100
+// #define EPS 3.0e-7
+#define FPMIN 1.0e-30
+#define SigIntDEF 1. // can go from 0.5 to 1.
+#define LBTHR 1e-10
+#define WS 3
+#define TOP_THRESH 1000000
+#define MAXS 10000000
+
+void rem_noise_GenLap(double *,double *,double,int, double*, double*, int,int,int,int,FILE*);
+double incgamma(double,double);
+void convolution(double*,int,double*,int,double*);
+void genlikE_shrink(double *, double *, int, int,double *,double *,int,int,double,int);
+void FindGenLapPar(double *,double,double &,double &,int,int,double*,double*,int);
+void MagPDFs_varT(double*,double *,double*,double,double,double,double,int,FILE *);
+void AverageMagPDFs(double *,double *,double *,double *,double *,int,int,FILE*);
+void convUnCut(double *,int,double*,int,double*);
+void subsample(double*,int,double*,int,int);

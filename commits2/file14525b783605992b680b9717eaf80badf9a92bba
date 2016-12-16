@@ -1,0 +1,643 @@
+#include "mme.h"
+
+V2D SearchMotionVectorI(V2D *D,double *U,double *UP, double *LLU, double *LLUP, double* HLU,double*HLUP, double* LHU, double *LHUP,  
+                                         double* HHU,double* HHUP,double *V, double *VP, double *LLV, double *LLVP, double* HLV,
+                                         double*HLVP, double* LHV, double *LHVP, double* HHV, double* HHVP,
+                                         double* LL, double *LLP, double* HL,double*HLP, double* LH, double *LHP, double* HH, 
+                                         double* HHP, double* LL2, double *LLP2,double* HL2,double*HLP2, double* LH2, 
+                                         double *LHP2,double* HH2, double* HHP2,int q,int r,
+			                 int t,int w,int h,double sigma,FILE *fp,FILE *fpp,tFrame* frame_dif,
+                                         double *madU0,double *madV0,double* mad0LL, double* mad0LH, double* mad0HL, double* mad0HH,
+                                         double* madLL, double* madLH,double* madHL, double* madHH,double* mad0LL2, double* mad0LH2,
+                                         double* mad0HL2, double* mad0HH2,double* madLL2, double* madLH2, double* madHL2, 
+                                         double* madHH2,double *madU, double *madV){
+  
+  int wn = 0;  // null neighbor
+
+   double max_kfx = 0.,min_kfx = 1000.;
+   double max_kfy = 0.,min_kfy = 1000.;
+
+   double indx,indy; // indicator in x and y motion direction
+
+   V2D VZ,BMS,BM,BMq,BMP,CV,NSL,NSR,NTL,NTR,CVq;
+
+     int NX = w/BS; 
+     int NY = h/BS; 
+
+       int i,nbest,m,n,x,y,s = r*NX+q;
+
+      int qsl,qsr,rsl,rsr,qtl,qtr,rtl,rtr,sl,sr,tl,tr;
+
+       qsl = q-1; qsr = q+1;
+       rsl = r-1; rsr = r-1;
+       qtl = q-1; qtr = q+1;
+       rtl = r+1; rtr = r+1;
+
+    if (qsl <    0) qsl = 0;    if (qsr > NX-1) qsr = NX-1;  // constraints for spatial neighbor vectors
+    if (rsl <    0) rsl = 0;    if (rsr <    0) rsr = 0;  // constraints for spatial neighbor vectors
+    if (qtl <    0) qtl = 0;    if (qtr > NX-1) qtr = NX-1;
+    if (rtl > NY-1) rtl = NY-1; if (rtr > NY-1) rtr = NY-1;
+
+   sl = rsl*NX + qsl;
+   sr = rsr*NX + qsr;
+   tl = rtl*NX + qtl;
+   tr = rtr*NX + qtr;
+
+     NSL = D[sl];  // left spatial neighbor
+     NSR = D[sr];  // right spatial neighbor
+     NTL = D[tl];  // left temporal neighbor
+     NTR = D[tr];  // right temporal neighbor
+  
+     double max,maxx,maxy,maxxy,maxl,mad_st;
+     double madx,mady,madx2,mady2,mad0ll2,mad0hh2,madu,madv,madVO,madUO;
+
+     double Max_samen  = 1000000.;
+     double Maxx,Maxy;
+
+     double penaltyX,penaltyY,penaltyS = 3,penaltyF=2.;  // prenoledge information about the sequence ....
+
+      double ProSig = 1.2*sigma;
+
+      double K1 = 0.55,K2 = 0.45,K3 = 0.,K3N = 1.;
+
+      double cost,costx,costy,C = 0.5;
+
+	 double kfx,kfy,kx,ky,ku,kv,madll,madlh,madhl,madhh,madll2,madlh2,madhl2,madhh2;
+
+         kx = ky = 1.; ku = kv = 1.; // 1.5 1
+
+         VZ.x = VZ.y = 0;
+
+          mad_st = MADF_C(LL2,VZ,LLP2,LLU,LLUP,LLV,LLVP,q,r,t,w,h);
+
+	  if(mad_st>(MADF_C(LL2,NSL,LLP2,LLU,LLUP,LLV,LLVP,q,r,t,w,h)+penaltyS)) { BMS = NSL; wn = 1; mad_st = MADF_C(LL2,NSL,LLP2,LLU,LLUP,LLV,LLVP,q,r,t,w,h);} 
+          else BMS = VZ; 
+          if(mad_st>(MADF_C(LL2,NSR,LLP2,LLU,LLUP,LLV,LLVP,q,r,t,w,h)+penaltyS)) { BMS = NSR; wn = 2; mad_st = MADF_C(LL2,NSR,LLP2,LLU,LLUP,LLV,LLVP,q,r,t,w,h);}
+          if(mad_st>(MADF_C(LL2,NTL,LLP2,LLU,LLUP,LLV,LLVP,q,r,t,w,h)+penaltyS)) { BMS = NTL; wn = 3; mad_st = MADF_C(LL2,NTL,LLP2,LLU,LLUP,LLV,LLVP,q,r,t,w,h);}
+          if(mad_st>(MADF_C(LL2,NTR,LLP2,LLU,LLUP,LLV,LLVP,q,r,t,w,h)+penaltyS)) { BMS = NTR; wn = 4;}
+
+          mad0LL[s] = MADF_C(LL,BMS,LLP,LLU,LLUP,LLV,LLVP,q,r,t,w,h); 
+          mad0LH[s] = MADF_C(LH,BMS,LHP,LHU,LHUP,LHV,LHVP,q,r,t,w,h);          //LH vertical moving edge
+          mad0HL[s] = MADF_C(HL,BMS,HLP,HLU,HLUP,HLV,HLVP,q,r,t,w,h);          //HL horizontal moving edge
+          mad0HH[s] = MADF_C(HH,BMS,HHP,HHU,HHUP,HHV,HHVP,q,r,t,w,h);          //HH diagonal moving edge
+
+          mad0LL2[s] = MADF_C(LL2,BMS,LLP2,LLU,LLUP,LLV,LLVP,q,r,t,w,h);
+          mad0LH2[s] = MADF_C(LH2,BMS,LHP2,LHU,LHUP,LHV,LHVP,q,r,t,w,h);       //LH vertical moving edge
+          mad0HL2[s] = MADF_C(HL2,BMS,HLP2,HLU,HLUP,HLV,HLVP,q,r,t,w,h);       //HL horizontal moving edge
+          mad0HH2[s] = MADF_C(HH2,BMS,HHP2,HHU,HHUP,HHV,HHVP,q,r,t,w,h);       //HH diagonal moving edge
+
+          BMq.x = (BMS.x)/2; 
+          BMq.y = (BMS.y)/2;
+
+          madU0[s] = MADF4(LLU,BMq,LLUP,q,r,t,w/2,h/2);       // U chrominance component
+          madV0[s] = MADF4(LLV,BMq,LLVP,q,r,t,w/2,h/2);       // V chrominance component
+
+	    maxx = K1*mad0HL[s] + K2*mad0HL2[s];// + K3*mad0LL2[s];
+	    maxy = K1*mad0LH[s] + K2*mad0LH2[s];// + K3*mad0LL2[s]; 
+
+              BM = BMS; //default motion vectors
+
+	      kfx = (ProSig/maxx)*(ProSig/maxx);
+	      kfy = (ProSig/maxy)*(ProSig/maxy);
+
+	      // if((t==13)&&(q==22)&&(r==18)) cout<<kfx<<"  KK \t"<<kfy<<endl;
+
+        /* TR START *
+	      if((t>3)&&(t<8)) fprintf(fp,"%d %d %3f %3f %d %3f %3f \n \n",BMS.x,BMS.y,maxx,maxy,wn,kfx,kfy);    /* TR END */
+
+	        Max_samen = maxx + maxy + ku*madu + kv*madv + K3N*mad0LL2[s];
+                Maxx = Maxy = 1000.;
+
+           for(int ny=-BSPI;ny<=BSPI;ny+=4)
+            for(int mx=-BSPI;mx<=BSPI;mx+=4){
+
+                                              CV.x = BMS.x + mx; 
+                                              CV.y = BMS.y + ny;
+ 
+                                              CVq.x = (CV.x)/2; 
+                                              CVq.y = (CV.y)/2;
+
+					      madhl = MADF_C(HL,CV,HLP,HLU,HLUP,HLV,HLVP,q,r,t,w,h);//mad0HL[s]; 
+					      madlh = MADF_C(LH,CV,LHP,LHU,LHUP,LHV,LHVP,q,r,t,w,h);//mad0LH[s];
+ 
+						madhl2 = MADF_C(HL2,CV,HLP2,HLU,HLUP,HLV,HLVP,q,r,t,w,h);//mad0HL2[s]; 
+						madlh2 = MADF_C(LH2,CV,LHP2,LHU,LHUP,LHV,LHVP,q,r,t,w,h);//mad0LH2[s]; 
+                                                madll2 = MADF_C(LL2,CV,LLP2,LLU,LLUP,LLV,LLVP,q,r,t,w,h);//mad0LL2[s];
+
+						  madu = MADF4(LLU,CVq,LLUP,q,r,t,w/2,h/2);//madU0[s];
+						  madv = MADF4(LLV,CVq,LLVP,q,r,t,w/2,h/2);//madV0[s];  
+
+						  costx = (C+kfx*fabs(mx/8.))*(K3*(madu+madv) + K2*madhl2 + K1*madhl);
+                                                  costy = (C+kfy*fabs(ny/8.))*(K3*(madu+madv) + K2*madlh2 + K1*madlh);
+
+						  cost = kx*costx + ky*costy + ku*madu + kv*madv + K3N*madll2;
+
+      /* TR START *
+		  if((t>3)&&(t<8)) fprintf(fp,"%d %d %3f %3f %3f %3f %3f %3f \n",mx,ny,madu,madv,madll2,costx,costy,cost);   /* TR END */
+
+			    if(Max_samen>(cost)) { Max_samen = cost; BM = CV;}
+			   
+     }
+     /* TR START *
+      if((t>3)&&(t<8)) fprintf(fp,"%d %d  \n \n",BM.x,BM.y);    /* TR END */
+
+   /********STEP II***************************/
+
+	 madx = MADF_C(HL,BM,HLP,HLU,HLUP,HLV,HLVP,q,r,t,w,h);
+	 mady = MADF_C(LH,BM,LHP,LHU,LHUP,LHV,LHVP,q,r,t,w,h);
+
+	 madx2 = MADF_C(HL2,BM,HLP2,HLU,HLUP,HLV,HLVP,q,r,t,w,h);
+	 mady2 = MADF_C(LH2,BM,LHP2,LHU,LHUP,LHV,LHVP,q,r,t,w,h);
+
+          BMq.x = (BM.x)/2; 
+          BMq.y = (BM.y)/2;
+
+	 madUO = MADF4(U,BMq,UP,q,r,t,w/2,h/2);
+	 madVO = MADF4(V,BMq,VP,q,r,t,w/2,h/2);
+	 
+         //mad0hh2 = MADF(HH2,BM,HHP2,q,r,t,w,h);
+         mad0ll2 = MADF_C(LL2,BM,LLP2,LLU,LLUP,LLV,LLVP,q,r,t,w,h);
+
+	 maxx = K1*madx + K2*madx2;// + K3*mad0ll2;
+	 maxy = K1*mady + K2*mady2;// + K3*mad0ll2;
+
+         BMP = BM; 
+
+	 kfx = (ProSig/maxx)*(ProSig/maxx);
+         kfy = (ProSig/maxy)*(ProSig/maxy);
+
+	 // if((t==13)&&(q==22)&&(r==18)) cout<<kfx<<"  KK \t"<<kfy<<endl;
+
+         /* TR START *
+	    if((t>3)&&(t<8)) fprintf(fp,"\n %3f %3f %d %d %3f %3f \n \n",maxx,maxy,BM.x,BM.y,kfx,kfy); /* TR END */
+
+	 Max_samen = 100.;//maxx + maxy + mad0ll2;
+         Maxx = Maxy = 100.;
+
+	 for(int ny=-BSPII;ny<=BSPII;ny+=2)
+	 for(int mx=-BSPII;mx<=BSPII;mx+=2){  // refining stage I
+  
+	                                 CV.x = BMP.x + mx; 
+	                                 CV.y = BMP.y + ny;
+
+                                         CVq.x = (CV.x)/2; 
+                                         CVq.y = (CV.y)/2;
+
+					 madhl = MADF_C(HL,CV,HLP,HLU,HLUP,HLV,HLVP,q,r,t,w,h);///madx; 
+					   madlh = MADF_C(LH,CV,LHP,LHU,LHUP,LHV,LHVP,q,r,t,w,h);///mady;
+
+					     madhl2 = MADF_C(HL2,CV,HLP2,HLU,HLUP,HLV,HLVP,q,r,t,w,h);///madx2; 
+					       madlh2 = MADF_C(LH2,CV,LHP2,LHU,LHUP,LHV,LHVP,q,r,t,w,h);///mady2;
+						 madll2 = MADF_C(LL2,CV,LLP2,LLU,LLUP,LLV,LLVP,q,r,t,w,h);///mad0ll2;
+
+						   madu = MADF4(LLU,CVq,LLUP,q,r,t,w/2,h/2);///madUO; 
+						     madv = MADF4(LLV,CVq,LLVP,q,r,t,w/2,h/2);///madVO;
+
+                                               costx = (C+kfx*fabs(mx/4.))*(K3*(madu+madv) + K2*madhl2 + K1*madhl);
+                                               costy = (C+kfy*fabs(ny/4.))*(K3*(madu+madv) + K2*madlh2 + K1*madlh);
+
+					       cost = kx*costx + ky*costy + ku*madu + kv*madv + K3N*madll2;  
+
+					       // cout<<kfx<<"\t"<<kfy<<endl; 
+
+    /* TR START *
+		 if((t>3)&&(t<8)) fprintf(fp,"%d %d %3f %3f %3f %3f %3f %3f \n",mx,ny,madu,madv,madll2,costx,costy,cost);      /* TR END */
+			    
+                    if(Max_samen>(cost)) { Max_samen = cost; BM = CV;}
+			   
+	 }
+
+
+	/*****************STEP III****************************/
+
+	  madx = MADF_C(HL,BM,HLP,HLU,HLUP,HLV,HLVP,q,r,t,w,h);
+	  mady = MADF_C(LH,BM,LHP,LHU,LHUP,LHV,LHVP,q,r,t,w,h);
+
+	   madx2 = MADF_C(HL2,BM,HLP2,HLU,HLUP,HLV,HLVP,q,r,t,w,h);
+	   mady2 = MADF_C(LH2,BM,LHP2,LHU,LHUP,LHV,LHVP,q,r,t,w,h);
+
+	   //mad0hh2 = MADF_C(HH2,BM,HHP2,HHU,HHUP,HHV,HHVP,q,r,t,w,h);
+           mad0ll2 = MADF_C(LL2,BM,LLP2,LLU,LLUP,LLV,LLVP,q,r,t,w,h);
+
+           BMq.x = (BM.x)/2; 
+           BMq.y = (BM.y)/2;
+
+           madUO = MADF4(U,BMq,UP,q,r,t,w/2,h/2);
+	   madVO = MADF4(V,BMq,VP,q,r,t,w/2,h/2);
+
+           maxx = K1*madx + K2*madx2;// + K3*mad0ll2;
+           maxy = K1*mady + K2*mady2;// + K3*mad0ll2;
+ 
+	   BMP = BM;
+
+	   kfx = (ProSig/maxx)*(ProSig/maxx);
+	   kfy = (ProSig/maxy)*(ProSig/maxy);
+
+           //  if((t==13)&&(q==22)&&(r==18)) cout<<kfx<<"  KK \t"<<kfy<<endl;
+          /* TR START *
+	         if((t>3)&&(t<8)) fprintf(fp,"\n %3f %3f %d %d %3f %3f \n \n",maxx,maxy,BM.x,BM.y,kfx,kfy); /* TR END */
+
+	    Max_samen = 100.;//maxx + maxy + mad0ll2;
+            Maxx = Maxy = 100.;
+
+	  for(int ny=-BSPIII;ny<=BSPIII;ny+=1)
+	  for(int mx=-BSPIII;mx<=BSPIII;mx+=1){  // refining stage I
+  
+	                                   CV.x = BMP.x + mx; 
+	                                   CV.y = BMP.y + ny;
+
+                                            CVq.x = (CV.x)/2; 
+                                            CVq.y = (CV.y)/2;
+
+	                                    madhl = MADF_C(HL,CV,HLP,HLU,HLUP,HLV,HLVP,q,r,t,w,h);///madx; 
+					      madlh = MADF_C(LH,CV,LHP,LHU,LHUP,LHV,LHVP,q,r,t,w,h);///mady;
+
+						madhl2 = MADF_C(HL2,CV,HLP2,HLU,HLUP,HLV,HLVP,q,r,t,w,h);///madx2; 
+						  madlh2 = MADF_C(LH2,CV,LHP2,LHU,LHUP,LHV,LHVP,q,r,t,w,h);///mady2;
+						    madll2 = MADF_C(LL2,CV,LLP2,LLU,LLUP,LLV,LLVP,q,r,t,w,h);///mad0ll2;
+
+						      madu = MADF4(LLU,CVq,LLUP,q,r,t,w/2,h/2);///madUO;
+							madv = MADF4(LLV,CVq,LLVP,q,r,t,w/2,h/2);///madVO;
+
+                                              costx = (C+kfx*fabs(mx/2.))*(K3*(madu+madv) + K2*madhl2 + K1*madhl);
+                                              costy = (C+kfy*fabs(ny/2.))*(K3*(madu+madv) + K2*madlh2 + K1*madlh);
+
+					 cost = kx*costx + ky*costy + ku*madu + kv*madv + K3N*madll2;   
+    /* TR START *
+		 if((t>3)&&(t<8)) fprintf(fp,"%d %d %3f %3f %3f %3f %3f %3f \n",mx,ny,madu,madv,madll2,costx,costy,cost);     /* TR END */
+
+			      if(Max_samen>(cost)) { Max_samen = cost; BM = CV;}
+	 }
+
+	  //cout<<"min cost = "<<madll2<<endl;
+
+     madLL[s] = MADF_C(LL,BM,LLP,LLU,LLUP,LLV,LLVP,q,r,t,w,h);
+     madLH[s] = MADF_C(LH,BM,LHP,LHU,LHUP,LHV,LHVP,q,r,t,w,h);
+     madHL[s] = MADF_C(HL,BM,HLP,HLU,HLUP,HLV,HLVP,q,r,t,w,h);
+     madHH[s] = MADF_C(HH,BM,HHP,HHU,HHUP,HHV,HHVP,q,r,t,w,h);
+     madLL2[s] = MADF_C(LL2,BM,LLP2,LLU,LLUP,LLV,LLVP,q,r,t,w,h);
+     madLH2[s] = MADF_C(LH2,BM,LHP2,LHU,LHUP,LHV,LHVP,q,r,t,w,h);
+     madHL2[s] = MADF_C(HL2,BM,HLP2,HLU,HLUP,HLV,HLVP,q,r,t,w,h);
+     madHH2[s] = MADF_C(HH2,BM,HHP2,HHU,HHUP,HHV,HHVP,q,r,t,w,h);
+
+     BMq.x = (BM.x)/2;
+     BMq.y = (BM.y)/2;
+
+     madU[s] = MADF4(LLU,BMq,LLUP,q,r,t,w/2,h/2);
+     madV[s] = MADF4(LLV,BMq,LLVP,q,r,t,w/2,h/2);
+
+     //if((t>3)&&(t<8)) fprintf(fp,"\n %d %3f %3f %3f %3f %3f %3f %3f \n",s,alphaLH, alphaHL, alphaHH, alphaLL2, alphaLH2, alphaHL2, alphaHH2);
+
+  //if((t>3)&&(t<8)) fprintf(fp,"%3f %3f %3f %3f %3f %3f %3f %3f \n",madLL[s],madLL2[s],madLH[s],madLH2[s],madHL[s],madHL2[s],madHH[s],madHH2[s]);
+
+    /* TR START *
+    if((t>3)&&(t<8))fprintf(fp,"%3f %3f %3f %3f %3f %3f %3f %3f %3f %3f \n\n",mad0LL[s],mad0LL2[s],mad0LH[s],mad0LH2[s],mad0HL[s],mad0HL2[s],mad0HH[s],mad0HH2[s],madU0[s],madV0[s]); /* TR END */
+  
+  return BM; 
+
+}
+
+double MAD(int* p,V2D D,int* frame_mem,int q,int r,int t,int w,int h){
+//MAD is the Mean absolute sum of differences
+	int x,y,n,m;
+	int sad = 0; //sad is the sum of absolute differences
+
+      for(n=0;n<BS;n++)
+	 for(m=0;m<BS;m++){
+			x = BS*q+m; y = BS*r+n;   // memory location with normal resolution
+			sad += abs(p[y*w+x] - dmi(x,y,D,frame_mem,w,h));
+    }//m,n
+	return ((double)sad/(BS*BS));
+}
+
+double MADF(double* BC, V2D D,double* BP,int q,int r,int t,int w,int h){ //MAD is the Mean absolute sum of differences double values
+	
+        int x,y,n,m;
+        double sad = 0.; //sad is the sum of absolute differences
+
+      for(n=0;n<BS;n++)
+	 for(m=0;m<BS;m++){
+			    x = BS*q+m; y = BS*r+n;   // memory location with normal resolution
+			    sad += fabs(BC[y*w+x] - dmf(x,y,D,BP,w,h));
+    }//m,n
+	return (sad/(double)(BS*BS));
+}
+
+double MADF_C(double* BC, V2D D,double* BP,double *U,double *UP,double *V,double *VP,int q,int r,int t,int w,int h){ 
+
+     //MAD is the Mean absolute sum of differences double values
+	
+        int x,y,n,m;
+        double sad = 0.; //sad is the sum of absolute differences
+        V2D DUV;
+
+        DUV.x = (D.x)/2; // scaling motion vectors for smaller resolution
+        DUV.y = (D.y)/2; // scaling motion vectors for smaller resolution
+
+      for(n=0;n<BS;n++)
+	 for(m=0;m<BS;m++){
+			    x = BS*q+m; y = BS*r+n;   // memory location with normal resolution
+			    sad += fabs(BC[y*w+x] - dmf(x,y,D,BP,w,h));
+    }//m,n
+
+          for(n=0;n<4;n++)
+	   for(m=0;m<4;m++){
+			     x = 4*q+m; y = 4*r+n;   // memory location with normal resolution
+			     sad += 2.75*fabs(V[y*w/2+x] - dmf(x,y,DUV,VP,w/2,h/2));
+    }//m,n
+
+          for(n=0;n<4;n++)
+	    for(m=0;m<4;m++){
+			      x = 4*q+m; y = 4*r+n;   // memory location with normal resolution
+			      sad += 2.75*fabs(U[y*w/2+x] - dmf(x,y,DUV,UP,w/2,h/2));
+    }//m,n
+
+	  return (sad/((double)(BS*BS)*1.5));
+}
+
+double MADF4(double* BC, V2D D,double* BP,int q,int r,int t,int w,int h){ //MAD is the Mean absolute sum of differences double values
+	
+        int x,y,n,m;
+        double sad = 0.; //sad is the sum of absolute differences
+
+	D.x = (D.x)/2; // scaling motion vectors for smaller resolution
+        D.y = (D.y)/2; // scaling motion vectors for smaller resolution
+
+      for(n=0;n<4;n++)
+	 for(m=0;m<4;m++){
+			    x = 4*q+m; y = 4*r+n;   // memory location with normal resolution
+			    sad += fabs(BC[y*w+x] - dmf(x,y,D,BP,w,h));
+    }//m,n
+	return (sad/(double)(4*4));
+}
+
+double MeanValueOfBlock(double* BC,int q,int r,int w,int h){ 
+	
+        int x,y,n,m;
+        double sad = 0.; //sad is the sum of absolute differences
+
+      for(n=0;n<BS;n++)
+	 for(m=0;m<BS;m++){
+			    x = BS*q+m; y = BS*r+n;   // memory location with normal resolution
+			    sad += fabs(BC[y*w+x]);
+    }//m,n
+	return (sad/(double)(BS*BS));
+}
+
+int dmi(int m,int n,V2D D,int* frame_mem,int w,int h){
+
+   int mx,my,i,j;
+
+   mx = m - D.x; if(mx<0) mx = 0; if(mx>=w) mx = w-1;
+   my = n - D.y; if(my<0) my = 0; if(my>=h) my = h-1;
+
+   int dm_out = frame_mem[my*w+mx];
+  
+   return dm_out;
+
+}
+    
+double dmf(int m,int n,V2D D,double* frame_mem,int w,int h){
+
+   int mx,my,i,j;
+
+   mx = m - D.x; if(mx<0) mx = 0; if(mx>=w) mx = w-1;
+   my = n - D.y; if(my<0) my = 0; if(my>=h) my = h-1;
+
+   return frame_mem[my*w+mx];
+}
+/***********************************************************/
+
+void TempUpDateMemoryI(V2D* D, int t, int w, int h,double sigma,double* madLL,double *madLH,double* madHL,double* madHH,double* madLL2,double *madLH2,double* madHL2,double* madHH2,double *madU,double *madV,double* LL,double *LH,double *HL, double *HH,double*LLP,double*LHP,double*HLP,double*HHP,double* LL2,double *LH2,double *HL2, double *HH2,double*LLP2,double*LHP2,double*HLP2,double*HHP2,double *U,double *UP,double *V, double *VP, FILE *fp,double* alpha1,double lambda){
+
+// updating the entire frame memory
+	double mem;
+	int n,m,i,s,x,y,q,qq,ms,ns;  
+        int NX = w/BS; 
+        int NY = h/BS; 
+        V2D DN,DS,DSq;        
+
+	double *alphaILH = new double[NX*NY];
+        double *alphaIHL = new double[NX*NY];
+        double *alphaIHH = new double[NX*NY];
+        double *alphaIILH = new double[NX*NY];
+        double *alphaIIHL = new double[NX*NY];
+        double *alphaIIHH = new double[NX*NY];
+        double *alphaIILL = new double[NX*NY];
+        double *alpha_Midle = new double[NX*NY];
+
+        double *alphaU = new double[NX*NY];
+        double *alphaV = new double[NX*NY];
+
+	//,alphaIHL,alphaIHH,alphaIILL,alphaIILH,alphaIIHL,alphaIIHH;
+    
+        double K1 = 0.8,K2 = 0.8,K3 = 0.85;
+
+        double K4 = 1.5,K5=0.8,KV=0.,KM=1.;
+
+	//double lambda_n = (lambda/(1.5*sigma))*(lambda/(1.5*sigma));
+
+	// if(lambda_n>1) lambda_n = 1.; 
+
+        double relLH,relHL,relHH,relLL2,relLH2,relHL2,relHH2,relI,relII;
+
+        double sigmaK1 = K1*sigma;
+
+	double UL = 0.9,ULC=0.85;
+        double DL = 0.;//0.111;
+
+        double *varLH =  new double[NX*NY];
+        double *varHL =  new double[NX*NY];
+        double *varHH =  new double[NX*NY];
+        double *varLH2 = new double[NX*NY];
+        double *varHL2 = new double[NX*NY];
+        double *varHH2 = new double[NX*NY];
+        double *varLL2 = new double[NX*NY];
+
+        double *varM = new double[NX*NY];
+
+        //double meanLH,meanHL,meanHH,meanLH2,meanHL2,meanHH2,meanLL2;
+
+	 for(s=0;s<NX*NY;s++){
+
+	   //K2 = K3 = K1 = 0.55*sigma/(madV[s]+madU[s]);
+
+	   //cout<<"K1 = "<<K1<<endl;
+
+	   double KU = 0.3*(sigma/(madU[s]));
+	   double KV = 0.3*(sigma/(madV[s]));
+
+	   //K2 = K3 = K1 = (KU+KV)/1.75;
+
+	   //cout<<"K1 = "<<madU[s]<<"\t"<<madV[s]<<"\t"<<K1<<endl;
+
+	  relLH = K1*(sigma/(madLH[s]))*(sigma/(madLH[s]));
+	  relHL = K1*(sigma/(madHL[s]))*(sigma/(madHL[s]));
+	  relHH = K1*(sigma/(madHH[s]))*(sigma/(madHH[s]));
+
+	  //cout<<"K1 = "<<madHL[s]<<"\t"<<madLH[s]<<"\t"<<KU<<endl;
+
+	  //relII = K2*sigma/(madLL2[s]+madLH2[s]+madHL2[s]+madHH2[s]);              
+
+	       relLL2 = K3*(sigma/(madLL2[s]))*(sigma/(madLL2[s]));
+	       relLH2 = K2*(sigma/(madLH2[s]))*(sigma/(madLH2[s]));
+	       relHL2 = K2*(sigma/(madHL2[s]))*(sigma/(madHL2[s]));
+	       relHH2 = K2*(sigma/(madHH2[s]))*(sigma/(madHH2[s]));
+	
+	                                  alphaILH[s] = relLH; 
+					  if(alphaILH[s]>UL) alphaILH[s] = UL;
+					  if(alphaILH[s]<DL) alphaILH[s] = 0.;
+
+					  alphaIHL[s] = relHL;  
+					  if(alphaIHL[s]>UL) alphaIHL[s] = UL;
+					  if(alphaIHL[s]<DL) alphaIHL[s] = 0.;
+
+					  alphaIHH[s] = relHH;   
+					  if(alphaIHH[s]>UL) alphaIHH[s] = UL;
+					  if(alphaIHH[s]<DL) alphaIHH[s] = 0.;
+
+		                          alphaIILH[s] = relLH2; 
+					  if(alphaIILH[s]>UL) alphaIILH[s] = UL;
+					  if(alphaIILH[s]<DL) alphaIILH[s] = 0.;
+
+		                          alphaIIHL[s] = relHL2; 
+					  if(alphaIIHL[s]>UL) alphaIIHL[s] = UL;
+					  if(alphaIIHL[s]<DL) alphaIIHL[s] = 0.;
+
+		                          alphaIIHH[s] = relHH2; 
+					  if(alphaIIHH[s]>UL) alphaIIHH[s] = UL;
+					  if(alphaIIHH[s]<DL) alphaIIHH[s] = 0.;
+
+					  alphaIILL[s] = relLL2; 
+					  if(alphaIILL[s]>UL) alphaIILL[s] = UL;
+					  if(alphaIILL[s]<DL) alphaIILL[s] = 0.;
+
+                                          alphaU[s] = KU;
+                                          if(alphaU[s]>ULC) alphaU[s] = ULC;
+                                          if(alphaU[s]<DL) alphaU[s] = 0.;
+ 
+                                          alphaV[s] = KV;
+                                          if(alphaV[s]>ULC) alphaV[s] = ULC;
+					  if(alphaV[s]<DL) alphaV[s] = 0.;
+
+					  //cout<<"KV = "<<madU[s]<<"\t"<<madV[s]<<endl;
+                
+					  //alpha_Midle[s] = (alphaIILL[s]+alphaIHH[s]+alphaIHL[s]+alphaILH[s])/4.;
+
+
+	  /* TR START *
+    fprintf(fp," \n %d %3f %3f %3f %3f %3f %3f %3f \n",s,madLH[s],madHL[s],madHH[s],madLH2[s],madHL2[s],madHH2[s],madLL2[s]); /* TR END */
+
+	  //fprintf(fp," \n %d %3f %3f %3f %3f %3f %3f %3f %3f \n",s,varLH[s],varHL[s],varHH[s],varLH2[s],varHL2[s],varHH2[s],varLL2[s],varM[s]);
+
+	  /* TR START *
+    fprintf(fp," \n %d %3f %3f %3f %3f %3f %3f %3f \n",s,alphaILH[s],alphaIHL[s],alphaIHH[s],alphaIILH[s],alphaIIHL[s],alphaIIHH[s],alphaIILL[s]); /* TR END */
+
+	}//s
+
+             for(n=0;n<h;n++)
+	      for (m=0;m<w;m++){ 
+		                      q = n*w + m; 
+                                      qq = m/2+(n/2)*w/2;
+                                      s = (n/BS)*NX + (m/BS); // number of the block
+
+			DS.x = D[s].x;
+                        DS.y = D[s].y;
+ 
+                        DSq.x = (D[s].x)/2;
+                        DSq.y = (D[s].y)/2;
+
+			LL2[q] = alphaIILL[s] * (double)dmf(m,n,DS,LLP2,w,h) + (1.-alphaIILL[s]) * (double)LL2[q];
+			LH2[q] = alphaIILH[s] * (double)dmf(m,n,DS,LHP2,w,h) + (1.-alphaIILH[s]) * (double)LH2[q];
+			HL2[q] = alphaIIHL[s] * (double)dmf(m,n,DS,HLP2,w,h) + (1.-alphaIIHL[s]) * (double)HL2[q];
+			HH2[q] = alphaIIHH[s] * (double)dmf(m,n,DS,HHP2,w,h) + (1.-alphaIIHH[s]) * (double)HH2[q];
+
+			LH[q]  = alphaILH[s] * (double)dmf(m,n,DS,LHP,w,h) + (1.-alphaILH[s]) * (double)LH[q];
+			HL[q]  = alphaIHL[s] * (double)dmf(m,n,DS,HLP,w,h) + (1.-alphaIHL[s]) * (double)HL[q];
+			HH[q]  = alphaIHH[s] * (double)dmf(m,n,DS,HHP,w,h) + (1.-alphaIHH[s]) * (double)HH[q];
+
+			//U[qq] = alphaU[s] * (double)dmf(m/2,n/2,DSq,UP,w/2,h/2) + (1.-alphaU[s]) * U[qq]; // color U channel
+			//V[qq] = alphaV[s] * (double)dmf(m/2,n/2,DSq,VP,w/2,h/2) + (1.-alphaV[s]) * V[qq]; // color V channel
+		
+		}//m,n
+
+              for(n=0;n<h/2;n++)
+	        for (m=0;m<w/2;m++){
+
+                               qq = n*w/2 + m; 
+                               s = (n*2/BS)*NX + (m*2/BS); 
+                               DSq.x = (D[s].x)/2;
+                               DSq.y = (D[s].y)/2;
+      
+                              U[qq] = alphaU[s] * (double)dmf(m,n,DSq,UP,w/2,h/2) + (1.-alphaU[s]) * U[qq]; // color U channel       
+                              V[qq] = alphaV[s] * (double)dmf(m,n,DSq,VP,w/2,h/2) + (1.-alphaV[s]) * V[qq]; // color V channel
+
+		}
+
+	      delete [] varLH;    delete [] varHL;    delete [] varHH;    delete [] varLH2;
+              delete [] varHL2;   delete [] varHH2;   delete [] varLL2;
+              delete [] alphaILH; delete [] alphaIHL; delete [] alphaIHH; delete [] varM;
+              delete [] alphaIILH;delete [] alphaIIHL;delete [] alphaIIHH;delete [] alphaIILL;delete [] alpha_Midle;
+
+}    
+
+double MSE_COMP(double *X, double *XP, int width, int height, int NX, V2D *D){
+
+  double dif = 0.;
+  int q,r,s;
+
+      for(int n = 0; n < height;n++)
+       for(int m = 0; m < width;m++){ 
+
+                                         q = m/8; r = n/8;   // number of block
+			                 s = r*NX + q;
+
+		  dif += ((X[m+n*width] - dmf(m,n,D[s],XP,width,height))*(X[m+n*width] - dmf(m,n,D[s],XP,width,height)));
+
+       }
+
+      dif /= (width*height);
+
+  return dif;
+
+}
+
+double Mot_seq(V2D *D,int width,int height,double *UM,double *VM,int NX){
+
+  int q,r,s;
+
+     for(int n = 0; n < height;n++)
+       for(int m = 0; m < width;m++){ 
+
+                                         q = m/8; r = n/8;   // number of block
+			                 s = r*NX + q;
+					 UM[m+n*width] = 128. + 12.*D[s].x;
+                                         VM[m+n*width] = 128. + 12.*D[s].y;
+       }
+	   return 0;
+}
+
+double Cal_smt(V2D *D,int NX,int NY){
+
+  int s,sc;
+  double dif = 0.;
+  double sum = 0.;
+
+  for(int q = 1; q < (NX-1);q++)
+    for(int r = 1; r < (NY-1);r++){ 
+                                    sc = q + r*NX;
+                                  
+	        for(int j = -1; j < 2; j++)
+                   for(int i = -1; i < 2; i++){
+   
+		                   s = (q+i) + (r+j)*NX;
+   
+				   dif += (fabs(double(D[sc].x-D[s].x))+fabs(double(D[sc].y-D[s].y)));
+                                   
+		   }
+       }
+
+     sum = 8*(NX-1)*(NY-1)/dif;
+
+  return sum;
+}

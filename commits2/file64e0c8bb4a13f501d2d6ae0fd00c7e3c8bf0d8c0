@@ -1,0 +1,246 @@
+// lbp_background.cpp : Defines the entry point for the console application.
+//
+
+#include "stdafx.h"
+
+//#include "func.h"
+#include "lbpModel.h"
+
+//#define SNIMAJ
+#define NTIME
+
+
+#ifndef NTIME
+#include <ctime>
+	clock_t start_c1, finish_c1;
+	double  duration=0;
+	double brojac=0;
+#endif
+
+using namespace std;
+
+////////////////////////
+//MAIN
+////////////////////////////////
+int _tmain(int argc, _TCHAR* argv[])
+{
+	////////////////////
+	//frame number
+	CvFont font;
+	cvInitFont( &font, CV_FONT_HERSHEY_PLAIN,3.0, 3.0, 0, 3, CV_AA);
+	CvPoint pt = cvPoint(10,50);
+	IplImage*  broj = cvCreateImage(cvSize(130,70),IPL_DEPTH_8U,3);
+	cvSetZero(broj);
+	cvNamedWindow("broj", 1);
+	char buffer[200];
+	char im_name[200];
+
+
+	IplImage* in=NULL;
+	IplImage* capturedFrame=NULL;
+	IplImage* imColor=0;
+	IplImage* imFg=0;
+	IplImage* imJoint=0;
+	IplImage* imJoint2=0;
+
+
+	CvVideoWriter* writer = 0;
+
+
+////////////////////////////////////////////////////////
+//main
+
+
+	//IplImage* prev=NULL;
+	//IplImage* diff=NULL;
+	IplConvKernel* morph2;
+	morph2=cvCreateStructuringElementEx(3,3,1,1,CV_SHAPE_ELLIPSE);
+	
+	//OpenCvAVI seq(in_fname);
+	CvCapture *seq = cvCaptureFromFile(argv[1]);
+	//CvCapture *seq = cvCaptureFromFile(in_fname);
+	if (seq==NULL){
+		cout<<"Error: Can't open video.\n"<<endl;
+		return -1;
+	}
+	//cvQueryFrame(seq);
+	CvSize imSize;
+	imSize.height =(int)cvGetCaptureProperty(seq,CV_CAP_PROP_FRAME_HEIGHT);
+	imSize.width =	(int)cvGetCaptureProperty(seq,CV_CAP_PROP_FRAME_WIDTH);
+	cout<<"sirina = "<<imSize.width<<"   visina = "<<imSize.height<<endl;
+	int nframes = (int)cvGetCaptureProperty(seq,CV_CAP_PROP_FRAME_COUNT);
+	cout<<"broj frejemova = "<<nframes<<endl;
+
+	int cfr;
+	int brojac=-1;
+	int time=3;
+	int start_fr=8; 
+
+
+	LBPModel bg(imSize.width,imSize.height);
+
+	/////////////////////////////////////////
+	//out
+//	char out_fname[200];
+//	sprintf(out_fname,"%s/runavgOut.avi",dir2);
+//	OpenCvAVI out_seq(out_fname,1000,25,imSize.width,imSize.height);
+	
+	//cvNamedWindow("in", 1);
+	cvNamedWindow("fg", 1 );
+	cvNamedWindow("out", 1 );
+	//cvNamedWindow("inLBP", 1);
+	cvNamedWindow("bgLBP", 1);
+
+	cvSetCaptureProperty(seq,CV_CAP_PROP_POS_FRAMES, start_fr);
+
+	int wrframe=0;
+	while(true){
+		cfr = (int) cvGetCaptureProperty(seq,CV_CAP_PROP_POS_FRAMES);
+		(brojac<0) ? brojac=cfr : brojac++;
+		if (brojac!=cfr) cout<<"Preskocen frejm!!!"<<endl;
+		//std::cout<<"broj fr = "<<cfr<<std::endl;
+		capturedFrame=cvQueryFrame(seq);
+		
+		if (cfr<start_fr) continue;
+		if (capturedFrame==NULL){
+			nframes=cfr;
+			cout<<"kraj sekvence"<<endl;
+			break;
+		}
+		if(!in)
+		{
+			in=cvCreateImage(imSize,IPL_DEPTH_8U,1);
+			in->origin = capturedFrame->origin;
+			imFg = cvCreateImage(imSize, 8, 1);
+			imFg->origin = capturedFrame->origin;
+			imColor = cvCreateImage(imSize, 8, 3);
+			imColor->origin = capturedFrame->origin;
+			imJoint = cvCreateImage(cvSize(2 * imSize.width,imSize.height) , 8, 3);
+			imJoint->origin = capturedFrame->origin;
+			imJoint2 = cvCreateImage(cvSize(imSize.width,2*imSize.height) , 8, 3);
+			imJoint2->origin = capturedFrame->origin;
+
+
+#ifdef SNIMAJ
+			writer = cvCreateVideoWriter( "out.avi", -1, 25, imSize);
+			//writer = cvCreateVideoWriter( "out.avi", -1, 25, cvSize(imSize.width,2*imSize.height));
+#endif
+		}
+		if (capturedFrame->nChannels==3){
+			//cvCvtColor(capturedFrame, in, CV_RGB2GRAY);
+			cvCvtColor(capturedFrame, in, CV_BGR2GRAY);
+		}
+		cvSetImageROI(imJoint, cvRect(0,0,imSize.width, imSize.height));
+		cvCopy(capturedFrame, imJoint);
+		cvResetImageROI(imJoint);
+		
+		cvSetImageROI(imJoint2, cvRect(0,0,imSize.width, imSize.height));
+		cvCopy(capturedFrame, imJoint2);
+		cvResetImageROI(imJoint2);
+		
+		cvCopy(capturedFrame, imColor);
+		//in = seq.GetFrGray(cfr);
+		//bg.update(in);
+
+#ifndef NTIME
+		start_c1 = clock();
+		brojac++;
+#endif
+	
+		bg.update(in);
+		//if (bg.alfa_bg>alfabg2) bg.alfa_bg-=(alfacd/10);
+#ifndef NTIME
+		finish_c1 = clock();
+		double dur1fr=(double)(finish_c1 - start_c1) / CLOCKS_PER_SEC;
+		duration += dur1fr;
+		if (cfr == nframes - 1){
+			cout<<"srednja brzina = "<<brojac/duration<<" fr/s"<<endl;
+			cout<<"brojac = "<<brojac<<endl;
+			cout<<"trajanje = "<<duration<<endl;
+	}
+#endif	
+		//cvConvertImage(bg.fgmaskOut, imFg,CV_CVTIMG_FLIP);
+		cvCopy(bg.fgmaskOut, imFg);
+		cvSet( imColor, cvScalar(255,0,255), imFg);
+		cvSetImageROI(imJoint, cvRect(imSize.width,0,imSize.width, imSize.height));
+		cvCopy(imColor, imJoint);
+		cvResetImageROI(imJoint);
+		
+		cvSetImageROI(imJoint2, cvRect(0,imSize.height,imSize.width, imSize.height));
+		cvCopy(imColor, imJoint2);
+		cvResetImageROI(imJoint2);
+
+		//cvShowImage("in", in);
+		cvShowImage("out", bg.fgmaskOut);
+		//cvShowImage("inLBP", bg.inLBP);
+		cvShowImage("bgLBP", bg.bgLBP);
+		cvShowImage("fg", imJoint2);
+
+	/*	if (prev==0){
+			prev=(IplImage*)cvClone(in);
+			diff=(IplImage*)cvClone(in);
+		}
+		else{
+			cvAbsDiff(in, prev,diff);
+			cvThreshold(diff,diff,trH,255,CV_THRESH_BINARY);
+
+			fsr2(diff,morph2,0,30);
+			//cvMorphologyEx(diff, diff, 0, 0, CV_MOP_OPEN, 1 );
+			//cvMorphologyEx(diff, diff, 0, 0, CV_MOP_CLOSE, 1 );
+			cvCopy(in, prev);
+		}
+		*/
+		
+
+		/////////////////////////
+		//broj
+		cvSetZero(broj);
+		sprintf(buffer,"%d",cfr);
+		cvPutText(broj, buffer, pt, &font, CV_RGB(128, 120, 0) );
+		cvShowImage("broj", broj);
+
+#ifdef SNIMAJ
+		cvWriteFrame(writer, bg.bgLBP);
+		//cvWriteFrame(writer, imJoint2);
+		//cvWriteFrame(writer, imColor);
+#endif
+		//IplImage* tmppm=cvCreateImage(imSize,IPL_DEPTH_8U,3);
+		//cvCvtColor(bg.fgmask,tmppm,CV_GRAY2RGB);
+		//sprintf(im_name,"%s/roomAvgFg_%d.tif",dir2,cfr);
+		//cvSaveImage(im_name, tmppm);
+		//cvReleaseImage(&tmppm);
+		
+		int key;
+		key=cvWaitKey(time);
+		if(key==27) break;
+		switch(key){
+			case ' ':{
+				if (time==3)
+					time=0;
+				break;
+			}
+			case 's': time=0; break;
+			case 'c': time=3; break;
+			//case 'z': {
+			//	sprintf(im_name,"imgCd_%d.jpg",cfr);
+			//	cvSaveImage(im_name, bg.cdmask);
+			//	sprintf(im_name,"imgFg_%d.jpg",cfr);
+			//	cvSaveImage(im_name, bg.fgmask);
+			//	sprintf(im_name,"imgFgOut_%d.jpg",cfr);
+			//	cvSaveImage(im_name, bg.fgmaskOut);
+			//	sprintf(im_name,"imgIn_%d.jpg",cfr);
+			//	cvSaveImage(im_name, capturedFrame);
+			//	//sprintf(im_name,"%s/imgCd2_%d.jpg",dir2,cfr);
+			//	//cvSaveImage(im_name, bg.cdmask);
+			//	break;
+			//		  }
+		}
+		}
+
+	cvReleaseCapture(&seq);
+#ifdef SNIMAJ
+	cvReleaseVideoWriter( &writer);
+#endif
+	return 0;
+};
+

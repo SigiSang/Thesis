@@ -1,0 +1,48 @@
+#ifndef _FUNC_H_
+#define _FUNC_H_
+
+#include "stdafx.h"
+
+
+
+void trEstim(IplImage* img, double* tr);
+void EstimTrRosin(IplImage* img, int* tr);
+
+int compare (const void * a, const void * b);
+
+// ovo sam ja probao da napravim isti automatski threshold algoritam iz rosin98
+// poglavlje 3 koji radi na principu procene gausovog suma
+// izgleda da algoritam lose radi
+void trEstim(IplImage* img, double* tr);
+
+double* _cv_max_element( double* start, double* end );
+
+ // vraca indeks maksimalnog umesto da vraca njegovu vrednost
+int _cv_max_element2( double* start, double* end );
+
+
+//  Function cvChangeDetection performs change detection for Foreground detection algorithm - Rosin98 poglavlje 5 - poasonova raspodela -preuzeto iz open cv ali je izmenjeno da vrati najbolji threshold a ne da theshold bude jednak navecoj sigmi
+// parameters:
+ // img - difference image
+void EstimTrRosin(IplImage* img, int* tr);
+
+///////////////////////////////
+//racunanje tp, tn , acc ...
+
+void calc_tn(const IplImage* gt, const IplImage* fg, IplImage* out);
+void calc_tp(const IplImage* gt, const IplImage* fg, IplImage* out);
+void calc_fn(const IplImage* gt, const IplImage* fg, IplImage* out);
+void calc_fp(const IplImage* gt, const IplImage* fg, IplImage* out);
+
+double calc_stats(const IplImage* gt, const IplImage* fg, void (*func)(const IplImage*,const IplImage*,IplImage*), IplImage* out);
+
+double calc_sensitivity(const IplImage* gt, const IplImage* fg);
+double calc_specificity(const IplImage* gt, const IplImage* fg);
+double calc_precision(const IplImage* gt, const IplImage* fg);
+double calc_acc(const IplImage* gt, const IplImage* fg);
+
+//potpuno isto sto i filter_small_regions_closeHoles samo nije u klasi da bi se moglo jednostavno pozvati odvojeno 
+void fsr2(IplImage *img, IplConvKernel* element, int perform_morph, int minArea);
+void writeBBox(IplImage *img, int minArea);
+#endif //_FUNC_H_
+

@@ -1,0 +1,147 @@
+/************************************************************
+ AVI
+ ------------------------------------------------------------
+ Support for AVI-files containing uncompressed RGB-frames.
+
+ ------------------------------------------------------------
+  version|   date   | description
+ --------+----------+----------------------------------------
+  0.1    |04/12/1998| DVDV, support for writing AVI-files
+
+************************************************************/
+
+
+#ifndef _avi_h_
+#define _avi_h_
+
+//#include "defsg.h"
+#include "frame.h"
+#include "riff.h"
+
+class tAVI_RGB
+{
+ protected:
+
+ typedef struct {
+  DWORD TimeBetweenFrames;
+  DWORD MaximumDataRate;
+  DWORD PaddingGranularity;
+  DWORD Flags;
+  DWORD TotalNumberOfFrames;
+  DWORD NumberOfInitialFrames;
+  DWORD NumberOfStreams;
+  DWORD SuggestedBufferSize;
+  DWORD Width;
+  DWORD Height;
+  DWORD TimeScale;
+  DWORD DataRate;
+  DWORD StartTime;
+  DWORD DataLength;
+ } tAVIHEADER; /* Microsoft "AVIFMT.H" : MainAVIHeader */
+
+ typedef struct {
+  WORD  left;
+  WORD  top;
+  WORD  right;
+  WORD  bottom; 
+ } tRECT; /* Microsoft "wintypes.h" : RECT16 */
+
+ typedef struct {
+  char  DataType[4];
+  char  DataHandler[4];
+  DWORD Flags;
+  WORD  Priority;
+  WORD  Language;
+  DWORD InitialFrames;
+  DWORD TimeScale;
+  DWORD DataRate; /* DataRate / TimeScale == samples/second */
+  DWORD StartTime;
+  DWORD DataLength;
+  DWORD SuggestedBufferSize;
+  DWORD Quality;
+  DWORD SampleSize;
+  tRECT Rectangle;
+ } tAVISTREAMHEADER; /* Microsoft "AVIFMT.H" AVIStreamHeader */
+
+ typedef struct {
+  BYTE  rgbBlue;
+  BYTE  rgbGreen;
+  BYTE  rgbRed;
+  BYTE  rgbReserved;
+ } tRGBQUAD;
+
+ typedef struct {
+  DWORD FormatLength;  
+  DWORD Width;
+  DWORD Height;
+  WORD  NumberOfPlanes;
+  WORD  BitCount;
+  char  Type[4];
+  DWORD PlaneSize;
+  DWORD XperMeter;
+  DWORD YperMeter;
+  DWORD ClrUsed;
+  DWORD ClrImportant;
+  // tRGBQUAD Colors[1];  -> NLR: this may be [0]
+ } tAVISTREAMFORMAT; /* Microsoft "wingdi.h" BITMAPINFO */
+
+ typedef struct {
+  char Identifier[4];
+  DWORD Flags;
+  DWORD Offset;
+  DWORD Length;
+ } tAVIINDEX;
+
+ typedef struct {
+  DWORD ChunckId;
+  DWORD PaddingSize;
+  BYTE *Padding;
+ } tAVIJUNK;
+
+ static const DWORD FLAGS_CONTAIN_IDX;      // AVI contains index chunck
+ static const DWORD FLAGS_USE_IDX_FOR_ORDER;// Use index chunck for frame order
+ static const DWORD FLAGS_INTERLEAVED;      // AVI is interleaved
+ static const DWORD FLAGS_CAPTURE_OPTIMIZE; // AVI is optimized for live video capture
+ static const DWORD FLAGS_COPYRIGHTED;      // AVI contains copyrighted data
+
+ tAVIHEADER       m_AVIh;
+ tAVISTREAMHEADER m_AVIsh;
+ tAVISTREAMFORMAT m_AVIsf;
+ tAVIINDEX        m_AVIid;
+
+ tRIFF *m_RIFF;
+ int    m_Fps;
+ DWORD  m_Flags;
+
+ uint* m_FileOffset;    // one for each frame
+ FILE* m_File;
+
+ void CreateRIFF(uint nframes, uint width, uint height);
+ void DestroyRIFF();
+ void close_file(void);
+
+ public:
+ tAVI_RGB();
+ ~tAVI_RGB();
+
+ void SetFPS(int fps) { m_Fps=fps; }
+ int  GetFPS() { return m_Fps; }
+ 
+ void ToggleInterleaved() { m_Flags^=FLAGS_INTERLEAVED; }
+ int IsInterleaved() { return (m_Flags & FLAGS_INTERLEAVED) ; }
+
+ void ToggleIndex() { m_Flags^=FLAGS_CONTAIN_IDX; }
+ int IsIndex() { return (m_Flags & FLAGS_CONTAIN_IDX); }
+ 
+ uint GetNumberOfFrames(void);
+ uint GetWidth(void);
+ uint GetHeight(void);
+
+ void Write(char const *fname, uint nframes, uint width, uint height);  // open new AVI file (read/write)
+ void Read(char const *fname);  // open exisiting AVI file for reading
+
+ void WriteFrame(uint frame_nr, tFrame*);
+ tFrame* ReadFrame(uint frame_nr, tFrame* buffer = NULL);
+};
+
+#endif /* _avi_h_ */

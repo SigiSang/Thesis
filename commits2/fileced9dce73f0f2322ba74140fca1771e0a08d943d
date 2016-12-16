@@ -1,0 +1,383 @@
+#include "lbpModel.h"
+
+
+LBPModel::LBPModel(int w, int h)
+{
+	imSize.height=h;
+	imSize.width=w;
+	bgLBP=cvCreateImage(cvSize(w,h),IPL_DEPTH_8U,1);
+	bgLBP->origin=1;
+	inLBP=cvCreateImage(cvSize(w,h),IPL_DEPTH_8U,1);
+	inLBP->origin=1;
+
+	cvSetZero(bgLBP);
+	cvSetZero(inLBP);
+
+	fgmaskOut=cvCreateImage(cvSize(w,h),IPL_DEPTH_8U,1);
+	fgmaskOut->origin=1;
+	//fgmask=cvCreateImage(cvSize(w,h),IPL_DEPTH_8U,1);
+	//fgmask->origin=1;
+	//cdmask=cvCreateImage(cvSize(w,h),IPL_DEPTH_8U,1);
+	//cdmask->origin=1;
+	//cvSetZero(fgmask);
+	//cvSetZero(cdmask);
+
+	tmp_8u=cvCreateImage(cvSize(w,h),IPL_DEPTH_8U,1);
+	tmp_8u->origin=1;
+	cvSetZero(tmp_8u);
+
+	prevFrLBP1=cvCreateImage(cvSize(w,h),IPL_DEPTH_8U,1);
+
+	prevFrLBP2=cvCreateImage(cvSize(w,h),IPL_DEPTH_8U,1);
+	
+	//tmp2_8u=cvCreateImage(cvSize(w,h),IPL_DEPTH_8U,1);
+	//cvSetZero(tmp2_8u);
+	//tmp_32f=cvCreateImage(cvSize(w,h),IPL_DEPTH_32F,1);
+	//cvSetZero(tmp_32f);
+
+	called=0;
+	morph=cvCreateStructuringElementEx(5,5,2,2,CV_SHAPE_ELLIPSE);
+	morph2=cvCreateStructuringElementEx(3,3,1,1,CV_SHAPE_ELLIPSE);
+	brojac=0;
+
+	LBPLUT = cvCreateMat(1,256,CV_8UC1);
+	fillLBPLUT();
+};
+LBPModel::~LBPModel()
+{
+	cvReleaseStructuringElement(&morph2);
+	cvReleaseStructuringElement(&morph);
+	cvReleaseImage(&bgLBP);
+	cvReleaseImage(&inLBP);
+	//cvReleaseImage(&cd);
+	//cvReleaseImage(&prev_fr1);
+	//cvReleaseImage(&prev_fr2);
+	
+	//cvReleaseImage(&fgmask);
+	cvReleaseImage(&fgmaskOut);
+	//cvReleaseImage(&cdmask);
+	cvReleaseImage(&tmp_8u);
+	//cvReleaseImage(&tmp2_8u);
+	//cvReleaseImage(&tmp_32f);
+	cvReleaseMat(&LBPLUT);
+};
+
+// funkcije za preprocesiranje zbog raznish sumova
+void LBPModel::preprocess(IplImage* in)
+{
+	//prefiltriranje ulaznog frama - zbog losek interlisinga
+	cvSmooth(in, in, CV_GAUSSIAN, 5, 5);
+	//cvSmooth(in, in, CV_BILATERAL, 5, 5);
+	//morfolosko filtriranje tri uzastopna frejma -
+	//trebalo bi da sluzi necemu kad pada sneg
+	
+	//temp_filt(in);
+};
+void LBPModel::writeFrame(IplImage* frame, CvRect & box)
+{
+	cvRectangle(frame, cvPoint(box.x,box.y),
+						cvPoint(box.x+box.width,box.y+box.height),
+						CV_RGB(255,255,255),2);
+
+}
+void LBPModel::temp_filt(IplImage* in)
+{
+//	IplImage* tmp;
+//	if (called){
+//		cvMin(prev_fr2,in,tmp_8u);
+//		cvMin(prev_fr1,tmp_8u,tmp_8u);
+
+		//zameni 1 i 2
+//		tmp=prev_fr2;
+//		prev_fr2=prev_fr1;
+//		prev_fr1=tmp;
+
+//		cvCopy(in,prev_fr1);
+//		cvCopy(tmp_8u,in);
+//	}
+//	else{
+//		cvCopy(in,prev_fr1);
+//		cvCopy(in,prev_fr2);
+//	}
+};
+//sporija je od filter_small_regions2 - verovatno zato sto prolazi kroz oba nivoa hijerarhije koju vraca cvFindContours
+void LBPModel::filter_small_regions(IplImage *img, IplConvKernel* element=NULL, int perform_morph=0, int minArea=10, int minWholeArea=0 ,int bez_rupa=1)
+{
+	CvSeq *first_seq = NULL, *prev_seq = NULL, *seq = NULL;
+	CvMemStorage *storage = cvCreateMemStorage();
+
+	CvSeq* contour = 0;
+	CvSeq* contour2 = 0;
+	CvScalar color = CV_RGB(255,255,255);
+	
+	if(perform_morph)
+	{
+		cvMorphologyEx(img, img, 0, element, CV_MOP_CLOSE, 1 );
+		cvMorphologyEx(img, img, 0, element, CV_MOP_OPEN, 1 );
+	}
+	
+	cvFindContours( img, storage, &first_seq, sizeof(CvContour), CV_RETR_CCOMP, CV_CHAIN_APPROX_NONE);
+	cvZero(img);
+	for( contour=first_seq ; contour != 0; contour = contour->h_next )
+	{
+		if (contour->v_next!=0)
+		{
+			for( contour2=contour->v_next; contour2 != 0; contour2 = contour2->h_next )
+			{
+				if ((bez_rupa)||(cvContourArea(contour2)<minWholeArea))
+				{
+					cvDrawContours(img, contour2, color, color, 0, CV_FILLED);
+				}
+			}
+		}
+		if (fabs(cvContourArea(contour))>minArea)
+			cvDrawContours(img, contour, color, color, -1, CV_FILLED);
+	}
+
+	cvClearMemStorage(storage);
+	cvReleaseMemStorage(&storage);
+}
+
+//pretpostavlja da postoje samo objekti bez rupa - brze radi od filter_small_regions
+void LBPModel::filter_small_regions_closeHoles(IplImage *img, IplConvKernel* element=NULL, int perform_morph=0, int minArea=10)
+{
+	CvSeq *first_seq = NULL, *prev_seq = NULL, *seq = NULL;
+	CvMemStorage *storage = cvCreateMemStorage();
+
+	CvScalar color = CV_RGB(255,255,255);
+	
+	if(perform_morph)
+	{
+		//cvSmooth(img,tmp_8u,CV_MEDIAN,7);
+		//cvOr(img,tmp_8u,img);
+
+		//cvMorphologyEx(img, img, 0, element, CV_MOP_CLOSE, 1 );
+		//ovo mozda ne treba je ce mali objekti svkakoa biti izbrisani
+		cvMorphologyEx(img, img, 0, element, CV_MOP_OPEN, 1 );
+	}
+	
+	cvFindContours( img, storage, &first_seq, sizeof(CvContour), CV_RETR_CCOMP, CV_CHAIN_APPROX_NONE);
+
+	if(minArea > 0)
+	{
+		for( seq = first_seq; seq; seq = seq->h_next )
+		{
+			CvContour* cnt = (CvContour*)seq;
+			if(fabs(cvContourArea(cnt))<minArea)
+			{
+            //delete small contour
+				prev_seq = seq->h_prev;
+				if(prev_seq)
+				{
+					prev_seq->h_next = seq->h_next;
+					if(seq->h_next) seq->h_next->h_prev = prev_seq;
+				}
+				else
+				{
+					first_seq = seq->h_next;
+					if( seq->h_next ) seq->h_next->h_prev = NULL;
+				}
+			}
+		}
+	}
+	cvZero(img);
+
+	CvRect rect;
+	for(seq=first_seq; seq != 0; seq = seq->h_next )
+	{
+		rect=cvBoundingRect(seq,0);
+		writeFrame(img,rect);
+		cvDrawContours(img,seq,color,color,0,CV_FILLED);
+	}
+	cvClearMemStorage(storage);
+	cvReleaseMemStorage(&storage);
+}
+
+
+
+//slicno kao i update  - napravljeno da bi mogli modeli da se paralelno porede
+//ovde je algoritam koji radi posao
+void LBPModel::update(IplImage* in)
+{
+	preprocess(in);
+	if (called){
+		calc_LBP(in, inLBP);
+
+		//cvThreshold(inLBP,inLBP,50,255,CV_THRESH_BINARY);
+		//cvMorphologyEx(inLBP, inLBP, 0, morph2, CV_MOP_CLOSE, 1 );
+
+		cvAbsDiff(bgLBP, inLBP, fgmaskOut);
+	
+		cvThreshold(fgmaskOut,fgmaskOut,20,255,CV_THRESH_BINARY);
+		cvCopy(inLBP, bgLBP);
+
+		//filter_small_regions(cdmask,morph,1,30);
+		//filter_small_regions(cdmask,morph,1,30,500,0);
+
+		//bez morph, sve sto je <30 bice obrisano, rupe unutar fg takodje
+		filter_small_regions_closeHoles(fgmaskOut,morph,0,30);
+		//cvRunningAvg(in, cd, alfa_cd);
+	}
+	else{
+		calc_LBP(in, inLBP);
+		cvCopy(inLBP, bgLBP);
+		called=1;
+	}
+};
+
+ inline float LBPModel::calc_bilinear(float a, float b, float c, float d)
+{
+	//const int c1=0.70711; //=1/sqrt(2)=sin(pi/4)=cos(pi/4)
+	//const int c2=0.29289; //=1-c1
+	//return ((a*c2*c2)+((b+c)*c1*c2)+(d*c1*c1)) 
+	return (float((a*0.0857864)+((b+c)*0.207107)+(d*0.5)));
+}
+void LBPModel::calc_LBP(IplImage* im_gray, IplImage* fIm)
+{
+	//	raspored bita	0 1 2
+	//					7 x 3
+	//					6 5 4
+	// 
+	//fIm - feature image
+	cvSetZero(fIm);
+	//IplImage *im_gray=cvCreateImage(imSize,8,1);
+	//cvCvtColor(im,im_gray,CV_BGR2GRAY);
+	for (int x=1;x<imSize.width-1;++x)
+	{
+		for (int y=1;y<imSize.height-1;++y)
+		{
+			//TODO konstanta koja potiskuje sum u LBP
+			double malo=7;
+
+			uchar LBPcode=0;
+			float pix0_orig=float(CV_IMAGE_ELEM(im_gray,uchar,y-1,x-1));
+			float pix1=float(CV_IMAGE_ELEM(im_gray,uchar,y-1,x));
+			float pix2_orig=float(CV_IMAGE_ELEM(im_gray,uchar,y-1,x+1));
+			float pix3=float(CV_IMAGE_ELEM(im_gray,uchar,y,x+1));
+			float pix4_orig=float(CV_IMAGE_ELEM(im_gray,uchar,y+1,x+1));
+			float pix5=float(CV_IMAGE_ELEM(im_gray,uchar,y+1,x));
+			float pix6_orig=float(CV_IMAGE_ELEM(im_gray,uchar,y+1,x-1));
+			float pix7=float(CV_IMAGE_ELEM(im_gray,uchar,y,x-1));
+			float pix8=float(CV_IMAGE_ELEM(im_gray,uchar,y,x));
+
+			float pix0=calc_bilinear(pix8, pix1, pix7, pix0_orig);
+			float pix2=calc_bilinear(pix8, pix1, pix3, pix2_orig);
+			float pix4=calc_bilinear(pix8, pix3, pix5, pix4_orig);
+			float pix6=calc_bilinear(pix8, pix5, pix7, pix6_orig);
+
+			if ((pix0-pix8)>=malo)
+				LBPcode|=1;
+			LBPcode<<=1;
+			if ((pix1-pix8)>=malo)
+				LBPcode|=1;
+			LBPcode<<=1;
+			if ((pix2-pix8)>=malo)
+				LBPcode|=1;
+			LBPcode<<=1;
+			if ((pix3-pix8)>=malo)
+				LBPcode|=1;
+			LBPcode<<=1;
+			if ((pix4-pix8)>=malo)
+				LBPcode|=1;
+			LBPcode<<=1;
+			if ((pix5-pix8)>=malo)
+				LBPcode|=1;
+			LBPcode<<=1;
+			if ((pix6-pix8)>=malo)
+				LBPcode|=1;
+			LBPcode<<=1;
+			if ((pix7-pix8)>=malo)
+				LBPcode|=1;
+			CV_IMAGE_ELEM(fIm,uchar,y,x)=LBPcode;
+		}
+	}
+	cvLUT(fIm,fIm,LBPLUT);
+
+	//cvReleaseImage(&im_gray);	
+}
+
+
+void LBPModel::fillLBPLUT(void)
+{
+	uchar a_ostalo=0;
+	uchar a0=25;
+	uchar a1=50;
+	uchar a2=75;
+	uchar a3=100;
+	uchar a4=125;
+	uchar a5=150;
+	uchar a6=175;
+	uchar a7=200;
+	uchar a8=225;
+
+	cvSet(LBPLUT,cvRealScalar(a_ostalo));
+
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,0)=a0;
+	
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,1)=a1;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,2)=a1;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,4)=a1;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,8)=a1;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,16)=a1;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,32)=a1;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,64)=a1;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,128)=a1;
+
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,3)=a2;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,6)=a2;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,12)=a2;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,24)=a2;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,48)=a2;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,96)=a2;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,192)=a2;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,129)=a2;//128+1
+
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,7)=a3;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,14)=a3;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,28)=a3;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,56)=a3;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,112)=a3;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,193)=a3;//192+1
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,131)=a3;//128+3
+	
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,15)=a4;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,30)=a4;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,60)=a4;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,120)=a4;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,240)=a4;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,225)=a4;//224+1
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,195)=a4;//192+3
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,135)=a4;//128+7
+
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,31)=a5;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,62)=a5;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,124)=a5;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,248)=a5;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,241)=a5;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,227)=a5;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,199)=a5;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,143)=a5;//128+15
+
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,63)=a6;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,226)=a6;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,252)=a6;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,249)=a6;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,243)=a6;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,231)=a6;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,207)=a6;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,159)=a6;//128+31
+
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,127)=a7;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,254)=a7;
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,253)=a7; //252+1
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,251)=a7; //248+3
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,247)=a7; //240+7
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,239)=a7; //224+15
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,223)=a7; //192+31
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,191)=a7; //128+63
+
+	MYCV_MAT_ELEM(LBPLUT,uchar,0,255)=a8;
+}
+
+
+

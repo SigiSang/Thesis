@@ -1,0 +1,54 @@
+#ifndef _GMODEL_H_
+#define _GMODEL_H_
+
+#include "stdafx.h"
+#include "func.h"
+
+class GModel
+{
+	public:
+		GModel(int w, int h, double a_bg, double a_ch_detect, double trL, double trH);
+		~GModel();
+		void rafineFG(IplImage* d1, IplImage* d2, IplImage* tmp_img);
+		void rafineFG_noExt(IplImage* d1, IplImage* d2, IplImage* tmp_img);
+		
+		void hist_tr(IplImage* in,IplImage* model, IplImage* out);
+		void hist_trCD(IplImage* in,IplImage* model, IplImage* out);
+		void hist_trCDsimple(IplImage* in,IplImage* model, IplImage* out);
+		
+		void adaptive_tr(IplImage* in,IplImage* model, IplImage* out);
+
+		void filter_small_regions(IplImage *img, IplConvKernel* element, int perform_morph, int minArea, int minWholeArea ,int bez_rupa);
+		void filter_small_regions_closeHoles(IplImage *img, IplConvKernel* element, int perform_morph, int minArea);
+		
+		void update(IplImage* in);
+		void update2(IplImage* in);
+		void shadowDetect(IplImage* in, double tr);
+
+		void preprocess (IplImage* in);
+		void temp_filt (IplImage* in);
+
+		
+		IplImage* bg;
+		IplImage* cd;
+		IplImage* fgmask;
+		IplImage* cdmask;
+		IplImage* fgmaskOut;
+
+		IplImage* prev_fr1;
+		IplImage* prev_fr2;
+		
+		IplImage* tmp_8u;
+		IplImage* tmp_32f;
+		
+		double alfa_bg;
+		double alfa_cd;
+		double tr_low;
+		double tr_high;
+		// i malo ovde
+		int called;
+		IplConvKernel* morph;	IplConvKernel* morph2;
+
+		int brojac;
+};
+#endif //_BGMODEL_H_

@@ -1,0 +1,27 @@
+#include "avi.h"
+#include<math.h>
+#include "metools.h"
+
+V2D SearchMotionVectorI(V2D *D,double *U,double *UP, double *LLU, double *LLUP, double* HLU,double*HLUP, double* LHU, double *LHUP,  
+                                         double* HHU,double* HHUP,double *V, double *VP, double *LLV, double *LLVP, double* HLV,
+                                         double*HLVP, double* LHV, double *LHVP, double* HHV, double* HHVP,
+                                         double* LL, double *LLP, double* HL,double*HLP, double* LH, double *LHP, double* HH, 
+                                         double* HHP, double* LL2, double *LLP2,double* HL2,double*HLP2, double* LH2, 
+                                         double *LHP2,double* HH2, double* HHP2,int q,int r,
+			                 int t,int w,int h,double sigma,FILE *fp,FILE *fpp,tFrame* frame_dif,
+                                         double *madU0,double *madV0,double* mad0LL, double* mad0LH, double* mad0HL, double* mad0HH,
+                                         double* madLL, double* madLH,double* madHL, double* madHH,double* mad0LL2, double* mad0LH2,
+                                         double* mad0HL2, double* mad0HH2,double* madLL2, double* madLH2, double* madHL2, 
+			                 double* madHH2,double *madU, double *madV);
+
+int   dmi( int, int, V2D, int*, int, int);
+double dmf(int,int,V2D,double*,int,int);
+double MAD(int*, V2D, int*, int, int, int, int, int);
+double MADF(double*,V2D,double*,int,int,int,int,int);
+void TempUpDateMemoryI(V2D*,int,int,int,double,double*,double *,double*,double*,double*,double*,double*,double*,double *,double*,double*,double*,double *,double *, double *,double*,double*,double*,double*,double*,double *,double *, double *,double*,double*,double*,double *,double *,double *, double *,FILE *,double*,double);
+double MeanValueOfBlock(double* BC,int q,int r,int w,int h);
+double MADF4(double*,V2D,double*,int,int,int,int,int);
+double MSE_COMP(double *X, double *XP, int width, int height, int NX, V2D *D);
+double MADF_C(double* BC, V2D D,double* BP,double *U,double *UP,double *V,double *VP,int q,int r,int t,int w,int h);
+double Mot_seq(V2D *D,int width,int height,double *UM,double *VM,int NX);
+double Cal_smt(V2D *D,int NX,int NY);

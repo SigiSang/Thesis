@@ -1,0 +1,86 @@
+To handle a much higher level of noise, it is necessary to have a higher level of certainty of motion detection.
+To achieve this, output information of two motion detection algorithms is combined.
+This set of information, with further processing, allows us to build a certainty model of pixel movement, which can then be thresholded to result in an improved binary motion mask.
+The first motion detection algorithm builds a background model of the scene, which in turn can be used to generate a foreground mask of the lastest frame.
+This foreground mask serves as an initial motion mask, but is not fully reliable because the background model often cannot correctly model the noise in the frames.
+This is due to the random nature of noise, especially in case of high levels of noise.
+More on this algorithm and the use of the resulting foreground mask in "Background subtraction".
+The second algorithm is a dense optical flow algorithm, which calculates motion vectors for each pixel in the frame.
+With some additional processing, a secondary motion mask can derived from these vectors.
+This processing includes removing vectors with a small magnitude, and adjusting locally irregular vectors by a proposed methodology called similar neighbour weighting.
+More on the dense optical flow algorithm used in "Optical flow".
+The additional processing is explained in more detail in "Optical flow regularisation"
+In the final step, the results of the previous steps are weighted, combined and thresholded, resulting in the final motion mask.
+The weighting process is described in "Weighting".
+
+Background subtraction
+	-> the background subtractor is initialized once at the start of the algoritm
+		=> @see MOG2 OpenCV, default values used:
+			-history=500
+			-varThreshold=16 (c_t)
+	-> update background model with frame F_t-1
+	-> generate binary foreground mask by subtracting the background model from the frame F_t-1 and thresholding the subtraction with a threshold value (c_t)
+		=> binary foreground mask M_bs
+	-> transform binary mask M_bs to binary weight matrix W_bs which will be needed in the later step "Weighting":
+		W_bs(x,y) = {  1	if M_bs = HIGH
+					{ -1	otherwise
+		=> binary weight matrix W_bs	
+
+Dense optical flow on 2 latest frames F_t-1 and F_t
+	-> calculate motion vectors V_dof for each pixel in F_t-1 using a dense optical flow algorithm
+		=> data matrix of motion vectors V_dof
+	-> filter on vector magnitude: remove vectors v_i (replace by zero vector) from V_dof where magnitude of v_i < m, for m=1? (statisch)
+		V_dof(x,y) = 	{ zero-vector	if magnitude(V_dof(x,y) < m
+						{ V_dof			otherwise
+
+Similar neighbour estimation 
+	-> sn(x_0,y_0)
+	-> for pixel p at (x_0,y_0) and with vector v_0 = V_fd(x_0,y_0),
+		for each neighbour nb_i of p at (x_i,y_i) within a set radius r so that
+			r >= sqrt( (x_0-x_1)² + (y_0-y_1)² )
+		decide wether or not the motion vector v_i = V_fd(x_i,y_i) of nb is similar (enough) to v_0
+	-> similarity of two vectors if decided by calculating the Euclidian distance between the endpoints of both vectors, as if they share the same sourcepoint, and normalizing it to the magnitude of the first vector. The vectors are estimated to be similiar if this normalised distance is below a set threshold.
+	-> for v_0(a_0,b_0) and v_1(a_1,b_1), the normalised distance is 
+		nd(v_0,v_1) = 	sqrt( (a_1-a_0)² + (b_1-b_0)² )
+						/
+						sqrt( a_0² + b_0² )
+			(note that nd(v_0,v_1)>=0)
+	-> v_0 and v_1 are estimated similar for a threshold t,
+		if nd(v_0,v_1) <= t <=> sqrt((a_1-a_0)²+(b_1-b_0)²) / sqrt(a_0²+b_0²) <= t
+		-> for more efficient computing, this can be changed to the equivalent comparison
+			(a_1-a_0)²+(b_1-b_0)² <= t²*(a_0²+b_0²)
+			where the right term only needs to be calculated once per pixel instead of for each neighbour.
+
+/*
+Morphological reconstruction
+	-> uses a binary marker M_mrk and binary mask M_msk
+	-> The thesholded weights mask M_snw serves as marker for MR
+		=> M_mrk = M_snw
+	-> The combination of the two current foreground masks M_bs and M_of serves as the mask for MR
+		=> M_msk = bitwise_or(M_bs,M_of)
+	-> The following steps are repeated until M_mrk does not change anymore with respect to the previous iteration
+		-M_mrk is dilated with a circular structuring element with diameter of 7
+		-M_mrk = bitwise_and(M_mrk,M_msk)
+
+The morphological reconstruction of M_mrk is the final binary motion mask of the algorithm M_mm
+*/
+
+Weighting
+
+
+Post-processing
+	It is often prudent to let the final motion mask undergo some post-processing, such as morphological opening and closing or median filter.
+
+
+
+*** Considering interpreting the returned values of optical flow ***
+The optical flow algorithm returns 2 float values (a,b) coupled to an integer coordinate (x,y) of a pixel.
+This represents a motion vector starting from (x,y) and ending in (x+a,y+b) (which become a float coordinate).
+This motion vector is to be interpreted as: the pixel found at (x,y) in frame F_t-1 is estimated to be at (x+a,y+b) in frame F_t.
+Because pixels in F_t only have integer coordinates, the float coordinate (x+a,y+b) would eventually be rounded down to integers.
+
+Throughout the entire algorithm, estimating motion between two frames,
+the search space is a limited 2D matrix of integers x,y, where 0<=x<width and  0<=y<height, where the unit is one pixel.
+So how much useful information do the float values contribute?
+It was argued that an image with more fine-grained pixels would give a different result when rounding down the float values.
+But aren't the float values relative to the pixel size anyway?

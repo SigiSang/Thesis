@@ -1,0 +1,214 @@
+/************************************************************
+  General Purpose Definition File 
+ ------------------------------------------------------------
+  Dimitri Van De Ville, dvdevill@elis.rug.ac.be
+  Boris Rogge,          brogge@elis.rug.ac.be
+ ------------------------------------------------------------
+  version|   date   | description
+ --------+----------+----------------------------------------
+  1.0    |04/12/1998| DVDV
+  1.1    |04/05/2000| DVDV, if compiled under Windows, WIN32 should be defined
+*************************************************************/
+
+#ifndef _defsg_h_
+#define _defsg_h_
+
+#include <assert.h>
+#include <math.h>
+#include <stdlib.h>
+
+/************************************************************
+ TYPEDEFS
+************************************************************/
+
+// Some frequently used conventions
+typedef unsigned char       byte;
+typedef unsigned char      uchar;
+typedef unsigned int        uint;
+typedef unsigned long      ulong;
+typedef double              real;
+typedef int              boolean;
+
+// Microsoft API conventions
+typedef unsigned int       DWORD;
+typedef unsigned short int  WORD;
+typedef unsigned char       BYTE;
+
+
+/************************************************************
+ GENERAL CONSTANTS DEFINITIONS
+************************************************************/
+
+const int MAX_FNAME_LENGTH=255;
+
+//for Windows only
+/************************************************************
+ MATHEMATICAL CONSTANTS DEFINITIONS
+************************************************************/
+
+#ifdef WIN32
+# define M_E            2.7182818284590452354   /* e */
+# define M_LOG2E        1.4426950408889634074   /* log_2 e */
+# define M_LOG10E       0.43429448190325182765  /* log_10 e */
+# define M_LN2          0.69314718055994530942  /* log_e 2 */
+# define M_LN10         2.30258509299404568402  /* log_e 10 */
+# define M_PI           3.14159265358979323846  /* pi */
+# define M_PI_2         1.57079632679489661923  /* pi/2 */
+# define M_PI_4         0.78539816339744830962  /* pi/4 */
+# define M_1_PI         0.31830988618379067154  /* 1/pi */
+# define M_2_PI         0.63661977236758134308  /* 2/pi */
+# define M_2_SQRTPI     1.12837916709551257390  /* 2/sqrt(pi) */
+# define M_SQRT2        1.41421356237309504880  /* sqrt(2) */
+# define M_SQRT1_2      0.70710678118654752440  /* 1/sqrt(2) */
+#endif
+
+/************************************************************
+ GENERAL PURPOSE TOOLS
+ ------------------------------------------------------------
+ Naming convention: 
+ > first character is an underscore
+ > other characters are uppercase
+ (no interference with STL-tools)
+************************************************************/
+
+// Min(imum) and max(imum)
+#define _MIN(a,b) ( ((a)<(b)) ? a : b )
+#define _MAX(a,b) ( ((a)>(b)) ? a : b )
+
+// Rounding
+#ifdef UNDEF
+template<class T> inline T _ROUND(T x)
+{
+  if ( x < (floor(x)+0.5) ) return T(floor(x)); // largest integral value not grater then x
+  else                      return T(ceil(x)); // smallest integral value not less than x
+}
+#else
+inline double _ROUND (double x)
+{
+  if (x < floor(x)+0.5) return floor (x);
+  else                  return ceil  (x);
+}
+
+#endif
+
+
+// Absolute value
+template<class T> inline T _ABS(T x)
+{
+ if (x<T(0)) return -x;
+ else        return x;
+}
+
+// Swap
+template<class T> inline void _SWAP(T x, T y)
+{
+ T z;
+ z=x;
+ x=y;
+ y=z;
+}
+
+// Signum
+template<class T> inline int _SGN(T i)
+{
+  if (i<T(0)) return -1;
+  if (i>T(0)) return +1;
+  return 0;
+}
+
+// Byte Truncation
+template<class T> inline byte _BYTE_TRUNC(T i) 
+{
+  if (i<T(0))   return 0;
+  if (i>T(255)) return 255;
+  return byte(i);
+}
+
+// Step
+template<class T> inline T _STEP(T x) 
+{
+  if (x<T(0))   return T(0);
+  return T(1);
+}
+
+// Soft Step
+#ifdef UNDEF
+template<class T> inline T _SOFT_STEP(T x) 
+{
+  if (x<T(0))   return T(0);
+  if (x==T(0))  return T(0.5);
+  return T(1);
+}
+#endif
+
+
+
+
+#define S_MIN(x,y)    (((x)<(y))?(x):(y))
+#define S_MAX(x,y)    (((x)>(y))?(x):(y))
+#define S_CLIP(lo,x,hi) S_MAX(lo,S_MIN(x,hi))
+
+inline int S_WRAP (int min, int val, int max) {
+  int range = max-min+1;
+  if (val < min) val += range; 
+  if (val > max) val -= range;
+  assert (min <= val);
+  assert (val <= max);
+  return val; 
+}
+
+/************************************************************
+ ENDIANISM
+ ------------------------------------------------------------
+ > determine type of endianism
+ > provide some general endianism conversion tools
+************************************************************/
+
+#define __RS6000__
+
+#if defined(__i386__) || defined(__VAX__) || defined(__alpha__) || defined(__SCO__)
+#undef BIG_ENDIAN_ARCHITECTURE
+#define LITTLE_ENDIAN_ARCHITECTURE 1
+#endif
+
+#if defined(__RS6000__) || defined(__SPARC__) || defined(__680x0__) || defined(__HPUX__)
+#undef LITTLE_ENDIAN_ARCHITECTURE
+#define BIG_ENDIAN_ARCHITECTURE 1
+#endif
+
+#if !defined(LITTLE_ENDIAN_ARCHITECTURE) && !defined(BIG_ENDIAN_ARCHITECTURE)
+Error: Unknown endianism of architecture
+#endif
+
+template<class T> inline T _SWAP_BYTE_ORDER(T v)
+{
+  union {
+    T n;
+    byte b[sizeof(T)];
+  } sw;
+
+  for(size_t i=0;i<sizeof(T);++i)
+   sw.b[i]=(v>>(8*i)) & 0xFF;
+
+  return sw.n;
+}
+
+template<class T> inline T _LE_CONVERSION(T v)
+{
+#ifdef LITTLE_ENDIAN_ARCHITECTURE
+  return T(v);
+#else
+  return _SWAP_BYTE_ORDER(v);
+#endif
+}
+
+template<class T> inline T _BE_CONVERSION(T v)
+{
+#ifdef BIG_ENDIAN_ARCHITECTURE
+  return T(v);
+#else
+  return _SWAP_BYTE_ORDER(v);
+#endif
+}
+
+#endif /* _defsg_h_ */

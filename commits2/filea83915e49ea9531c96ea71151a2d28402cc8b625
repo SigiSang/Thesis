@@ -1,0 +1,287 @@
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include "tools.h"
+
+void GetAD(tFrame* image,double *D,int NX, int NY,double KOEF){  // putting data from buffer frame to pixel values in frame
+
+int WH = NX*NY;
+int lum;
+
+for(int m=0;m<NX;m++)
+	for(int n=0;n<NY;n++) {
+		lum = (int)_ROUND(D[n*NX+m]+KOEF);
+		if(lum>255) lum = 255;
+		if(lum<0) lum = 0; 
+
+					for(int c=0;c<3;c++) image->PutComponent(m,n,c,lum);  // put all same values for both R G B 
+																																									// components in order to get gray value images 
+
+					// c = 0  - R component
+														// c = 1  - G component
+														// c = 2  - B component
+				}
+		}
+
+void GetADC(tFrame* image,double *R,double *G, double *B,int NX, int NY){  // putting data from buffer frame to pixel values in frame
+
+int WH = NX*NY;
+int r,g,b;
+
+for(int m=0;m<NX;m++)
+	for(int n=0;n<NY;n++) {
+		r = (int)_ROUND(R[n*NX+m]);
+		if(r>255) r = 255;
+		if(r<0) r = 0;
+
+		g = (int)_ROUND(G[n*NX+m]);
+		if(g>255) g = 255;
+		if(g<0) g = 0; 
+
+		b = (int)_ROUND(B[n*NX+m]);
+		if(b>255) b = 255;
+		if(b<0) b = 0;
+
+		image->PutComponent(m,n,2,r);  
+		image->PutComponent(m,n,1,g); 
+		image->PutComponent(m,n,0,b); 
+	}
+}
+
+void GetAD_Rescaled(tFrame* image,double *D,int NX, int NY){
+
+	int WH = NX*NY;
+	int lum;
+	double lumd;
+	double max = 0.;
+	double min = 10000.;
+	double BW,koefbw;
+
+	for(int m=0;m<NX;m++)
+		for(int n=0;n<NY;n++) {
+			lumd = D[n*NX+m];
+			if(lumd>max) max=lumd;
+			if(lumd<min) min=lumd;
+		}
+
+		BW = max - min;  // signal bandwidth of the output signal
+		koefbw = 256/BW;
+
+		for(int m=0;m<NX;m++)
+			for(int n=0;n<NY;n++) {
+			 lum = (int)_ROUND(koefbw*(-min+D[n*NX+m]));
+
+			 if(lum>255) lum = 255;
+			 if(lum<0) lum = 0; 
+
+			 for(int c=0;c<3;c++) image->PutComponent(m,n,c,lum); 
+
+		 }
+ }
+
+ void PutImageIntoArray(tFrame* image, double *LL, int width, int height){
+
+	for(int n = 0; n < height;n++)
+for(int m = 0; m < width;m++) LL[m+n*width] = (double)(image -> GetComponent(m,n,0)); // only one componetn is enough 
+																																														// because all the other are the same
+}         
+
+void PutImageIntoArrayC(tFrame* image, double *LL, int width, int height,int c){
+
+for(int n = 0; n < height;n++)
+for(int m = 0; m < width;m++) LL[m+n*width] = (double)(image -> GetComponent(m,n,c)); // put this color component 
+
+}      
+
+void Convert_RGBtoYUV(double *R, double *G, double *B, int width, int height, double *Y, double *U, double *V){
+
+//double max=-10000.,min=10000.;
+
+for(int n = 0; n < height;n++)
+	for(int m = 0; m < width;m++){
+
+		//Y[m+n*width] =  0.257*R[m+n*width] + 0.504*G[m+n*width] + 0.098*B[m+n*width] + 16;
+		//V[m+n*width] =  0.439*R[m+n*width] - 0.368*G[m+n*width] - 0.071*B[m+n*width] + 128;
+		//U[m+n*width] =  -0.148*R[m+n*width] - 0.291*G[m+n*width] + 0.439*B[m+n*width] + 128;
+
+	 Y[m+n*width] =  0.299*R[m+n*width]  + 0.587*G[m+n*width] + 0.114*B[m+n*width];
+	 U[m+n*width] =  128 + 0.565*(B[m+n*width] - Y[m+n*width]);
+	 V[m+n*width] =  128 + 0.713*(R[m+n*width] - Y[m+n*width]); 
+
+			 //Y[m+n*width] =  0.299*R[m+n*width]  + 0.587*G[m+n*width] + 0.114*B[m+n*width];
+			 //U[m+n*width] =  128 + 0.565*(B[(m/2)*2+(n/2)*2*width] - Y[(m/2)*2+(n/2)*2*width]);
+			 //V[m+n*width] =  128 + 0.713*(R[(m/2)*2+(n/2)*2*width] - Y[(m/2)*2+(n/2)*2*width]); 
+
+ //if(U[m+n*width]<min) min = U[m+n*width];
+			 //if(U[m+n*width]>max) max = U[m+n*width]; 
+
+ //cout<<"COR"<<(m/2)*2<<"\t"<<(n/2)*2<<"\t"<<U[m+n*width]<<endl;
+
+ }
+
+}
+
+void Convert_YUVtoRGB(double *R, double *G, double *B, int width, int height, double *Y, double *U, double *V){
+
+for(int n = 0; n < height;n++)
+	for(int m = 0; m < width;m++){
+
+		//B[m+n*width] =  1.164*(Y[m+n*width]-16)                            + 2.018*(U[m+n*width]-128);
+		//  G[m+n*width] =  1.164*(Y[m+n*width]-16) - 0.813*(V[m+n*width]-128) - 0.391*(U[m+n*width]-128);
+		//  R[m+n*width] =  1.164*(Y[m+n*width]-16) + 1.596*(V[m+n*width]-128);
+
+		R[m+n*width] = Y[m+n*width]                            + 1.403*(V[m+n*width]-128);
+		G[m+n*width] = Y[m+n*width] - 0.344*(U[m+n*width]-128) - 0.714*(V[m+n*width]-128);
+		B[m+n*width] = Y[m+n*width] + 1.770*(U[m+n*width]-128);
+
+		//cout<<"COR"<<"\t"<<m<<"\t"<<n<<"\t"<<V[m+n*width]<<"\t"<<U[m+n*width]<<endl;  
+
+	}
+
+}
+
+double Calulate_PSNR(tFrame* out_image,tFrame* orig_image,int width,int height){
+
+	double PSNR,DIFF=0.; 
+	double KONST = 1./(double)((width-2*BWW)*(height-2*BWW));
+	int lum,lumo;
+
+	for(int n = BWW; n < height-BWW;n++)
+		for(int m = BWW; m < width-BWW;m++) {
+
+			lum = out_image -> GetComponent(m,n,0);
+			lumo = orig_image -> GetComponent(m,n,0);
+
+			DIFF += (double)((lum-lumo)*(lum-lumo));
+		}
+
+		PSNR = 20.*log(255./sqrt(DIFF*KONST))/log(10.);
+
+		return PSNR;
+	}
+
+	double Calulate_PSNRC(tFrame* out_image,tFrame* orig_image,int width,int height){
+
+		double PSNR,DIFF=0.; 
+		double KONST = 1./(double)((width-2*BWW)*(height-2*BWW));
+		int lum,lumo;
+
+		for(int c=0;c<3;c++){
+
+		 for(int n = BWW; n < height-BWW;n++)
+			for(int m = BWW; m < width-BWW;m++) {
+
+				lum = out_image -> GetComponent(m,n,c);
+				lumo = orig_image -> GetComponent(m,n,c);
+
+				DIFF += (double)((lum-lumo)*(lum-lumo));
+			}
+		}
+
+		DIFF /= 3.;
+
+		PSNR = 20.*log(255./sqrt(DIFF*KONST))/log(10.);
+
+		return PSNR;
+	}
+
+	double Calulate_PSNR_A(double *YS,double *X,int width,int height){
+
+		double PSNR,DIFF=0.; 
+		double KONST = 1./(double)((width-2*BWW)*(height-2*BWW));
+		int lum,lumo;
+
+		for(int n = BWW; n < height-BWW;n++)
+			for(int m = BWW; m < width-BWW;m++) {
+
+			 DIFF += (double)((YS[m+n*width]-X[m+n*width])*(YS[m+n*width]-X[m+n*width]));
+		 }
+
+		 PSNR = 20.*log(255./sqrt(DIFF*KONST))/log(10.);
+
+		 return PSNR;
+	 }
+
+	 void UpDateMemory(double *HH,double *HL,double *LH,double* LL,double *HHP,double *HLP,double *LHP,double *LLP,int M,int N){
+
+		 for(int n=0;n<N;n++)
+			for(int m=0;m<M;m++){
+			 HHP[m+n*M] = HH[m+n*M]; 
+			 HLP[m+n*M] = HL[m+n*M];
+			 LHP[m+n*M] = LH[m+n*M];
+			 LLP[m+n*M] = LL[m+n*M];
+		 } 
+	 }
+
+	 void UpDateMemory2(double *U,double *V,double *UP,double* VP,int M,int N){
+
+		 for(int n=0;n<N;n++)
+			for(int m=0;m<M;m++){
+			 UP[m+n*M] = U[m+n*M]; 
+			 VP[m+n*M] = V[m+n*M];
+		 } 
+	 }
+
+	 void MultiplyCoefficients(double* LH1,double* HL1,double* HH1,double* LH2,double* HL2,double* HH2,int width,int height,double m_c){
+
+		for(int n=0;n<height;n++)
+			for(int m=0;m<width;m++){
+
+				LH1[n*width+m] = m_c*LH1[n*width+m]; HL1[n*width+m] = m_c*HL1[n*width+m]; HH1[n*width+m] = m_c*HH1[n*width+m];
+				LH2[n*width+m] = m_c*LH2[n*width+m]; HL2[n*width+m] = m_c*HL2[n*width+m]; HH2[n*width+m] = m_c*HH2[n*width+m];
+
+			}
+
+		}
+
+		void PutCoefficientsIRO(double *LH,int width,int height,int flx,int fly){
+
+/** shifting everything to the right and up for the filter length ****/
+
+			double *temp = new double[width*height];
+
+			for(int j=0;j<height;j++)
+				for(int i=0;i<width;i++){
+
+				 temp[i+j*width] = LH[(((i-flx)<0)?(width+(i-flx)):(i-flx))+(((j-fly)<0)?(height+(j-fly)):(j-fly))*width];
+
+			 }
+
+			 for(int k=0;k<(width*height);k++) LH[k] = temp[k];
+
+				delete [] temp;
+
+		}
+
+void PutBackCoefficientsIRO(double *LH,int width,int height,int flx,int fly){
+
+	double *temp = new double[width*height];
+
+	for(int j=0;j<height;j++){
+		for(int i=0;i<width;i++){
+			temp[i+j*width] = LH[(((i+flx)>=width)?((i+flx)-width):(i+flx))+(((j+fly)>=height)?((j+fly)-height):(j+fly))*width];
+		}
+	}
+
+	for(int k=0;k<(width*height);k++)
+		LH[k] = temp[k];
+
+	delete [] temp;
+}
+
+void Subsample(double *X1, int width, int height, double *X2){
+	for(int n = 0; n < height/2;n++){
+		for(int m = 0; m < width/2;m++){
+			X2[m+n*width/2] = X1[m*2+n*2*width];
+		}
+	}
+}
+
+void Upsample(double *X1, int width, int height, double *X2){
+	for(int n = 0; n < height;n++){
+		for(int m = 0; m < width;m++){ 
+			X2[m+n*width] = X1[m/2+n/2*width/2];
+		}
+	}
+}
+

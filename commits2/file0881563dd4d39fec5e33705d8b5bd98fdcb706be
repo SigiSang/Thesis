@@ -1,0 +1,10 @@
+#include <iostream>
+#include<algorithm>
+#include "tools.h"
+
+void Wavelet_Image_Transform(double *,double *,double *,double *,double *,int,int,int,int);
+void Inverse_Wavelet_Image_Transform(double *,double *,double *,double *,double *,int,int,int,int);
+void wtM(double *a, double *h, double *c, int p, int N, int D,int tr);
+void cconv1(double *z,double *x, int M, double *y, int N);
+void cconv(double* z,double *x, int M, double *y, int N);
+void conv(double* z,double *x, int M, double *y, int L);

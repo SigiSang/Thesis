@@ -1,0 +1,21 @@
+FILE(REMOVE_RECURSE
+  "CMakeFiles/mcwf.dir/noiseest.cc.o"
+  "CMakeFiles/mcwf.dir/metools.cc.o"
+  "CMakeFiles/mcwf.dir/mme.cc.o"
+  "CMakeFiles/mcwf.dir/frame.cc.o"
+  "CMakeFiles/mcwf.dir/tools.cc.o"
+  "CMakeFiles/mcwf.dir/wf.cc.o"
+  "CMakeFiles/mcwf.dir/mcwf.cc.o"
+  "CMakeFiles/mcwf.dir/sf.cc.o"
+  "CMakeFiles/mcwf.dir/riff.cc.o"
+  "CMakeFiles/mcwf.dir/wavelet.cc.o"
+  "CMakeFiles/mcwf.dir/avi.cc.o"
+  "CMakeFiles/mcwf.dir/Gamma.cpp.o"
+  "mcwf.pdb"
+  "mcwf"
+)
+
+# Per-language clean rules from dependency scanning.
+FOREACH(lang CXX)
+  INCLUDE(CMakeFiles/mcwf.dir/cmake_clean_${lang}.cmake OPTIONAL)
+ENDFOREACH(lang)

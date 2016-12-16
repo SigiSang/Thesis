@@ -1,0 +1,146 @@
+/************************************************************
+ RIFF: Resource Interchange File Format
+ ------------------------------------------------------------
+ General toolbox for handling RIFF-files.
+ Several multimedia data are stored in RIFF-format.
+  (e.g. AVI, WAV, ANI, ...)
+ RIFF only provides a framework.
+
+ ------------------------------------------------------------
+  version|   date   | description
+ --------+----------+----------------------------------------
+  0.1    |04/12/1998| DVDV, can be used for writing AVI-files
+         |          |
+
+ To Do:
+
+************************************************************/
+
+#ifndef _riff_h_
+#define _riff_h_
+
+#include <string.h>
+
+#include "defsg.h"    // general purpose definitions
+
+//#ifdef _MSC_VER       // Microsoft Visual C++ 
+
+//#include "vector.h"
+
+#include <vector>
+//#define vector std::vector
+//#include <assert.h>
+//#if 0 // win_cerr not yet functional
+//#include "win_cerr.h"
+//#define CERR win_cerr
+//#else
+//#include <iostream>
+using namespace std;
+
+#define CERR cerr
+//#endif
+//#else // not Microsoft
+//#include "vector.h"  // STL vector template
+//#define CERR cerr
+//#endif        // _MSC_VER
+
+//extern "C" {
+#include <stdio.h>   // for classic C file I/O
+//}
+
+static const int RIFF_IDENTIFIER_LEN=5;
+
+
+/************************************************************
+ RIFF is based upon lists (tList) and chuncks (tChunck).
+ Both structural elements need the same basic functionality.
+ tChunckList provides this through inheritance.
+************************************************************/
+
+class tChunckList {
+protected:
+  char m_Id[RIFF_IDENTIFIER_LEN];
+  vector<tChunckList*> m_Elements;
+
+  void not_implemented(char const *s) {
+  //CERR<<s<<" not implemented !"<<endl;
+    fprintf(stderr, "%s not implemented !\n", s);
+    assert(0);
+  }
+
+public:
+  tChunckList() {}; // for STL compliance
+  tChunckList(char const *id) { strcpy(m_Id,id); };
+  virtual ~tChunckList() {}; // allow destructor to be overloaded
+
+  virtual void addChunckList(tChunckList * const &);
+
+  virtual void addToChunck(int, BYTE*) { not_implemented("tChunckList::addToChunck()"); return; }
+  virtual int  getSize() = 0; // { not_implemented("tChunckList::getSize()"); return 0; }
+//  virtual uint* write(FILE *, uint* ) = 0; // { not_implemented("tChunckList::write()"); return NULL;}
+  virtual uint* write(FILE *, uint* ) = 0; // { not_implemented("tChunckList::write()"); return NULL;}
+};
+
+
+/************************************************************
+ General RIFF-class
+************************************************************/
+
+class tRIFF {
+protected:
+  char m_Type[RIFF_IDENTIFIER_LEN];
+
+  vector<tChunckList*> m_Elements;
+
+public:
+  tRIFF(char const *type) 
+  { 
+    strcpy(m_Type ,type); 
+  };
+  ~tRIFF();
+
+  void addChunckList(tChunckList* const &);
+  void Write(FILE*, uint* FileOffset);
+};
+
+
+/************************************************************
+ Basic Chunck class
+************************************************************/
+
+class tChunck : public tChunckList {
+private:
+  BYTE *m_Ptr;
+
+protected:
+  int  m_Size;
+  BYTE *m_Data;
+
+public:
+  tChunck(char const *, int);
+  tChunck(char const *, int, BYTE *);
+  ~tChunck();
+
+  void addChunckList(tChunckList * const &) 
+   { not_implemented("tChunck::addChunckList"); };
+
+  void addToChunck(int, BYTE *);
+  int  getSize();
+  uint* write(FILE *, uint* FileOffset);
+};
+
+/************************************************************
+ Basic List class
+************************************************************/
+
+class tList : public tChunckList {
+public:
+  tList(char const *id) : tChunckList(id) {};
+  ~tList();
+
+  int  getSize();  
+  uint* write(FILE *, uint* FileOffset);
+};
+
+
+#endif /* _riff_h_ */

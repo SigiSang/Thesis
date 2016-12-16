@@ -1,0 +1,37 @@
+1 week ~ 4 werkdagen
+
+-denoising (evt meerdere) implementeren (1+.5 week)
+	-zlokolica converteren (2 dagen)
+	-zlokolica paper lezen (.5 dag)
+	-opencv denoising algoritmes bekijken (1.5 dag)
+	-boek schrijven (2 dagen)
+-meer datasets zoeken of maken (1+.5 week)
+	-boek schrijven (2 dagen)
+-demo applicatie maken (1+.5 week)
+	-doel? (object counting?)
+		-aantal bewegende objecten in beeld tellen
+	-bedoelde werking (1 week)
+		-video frame per frame inladen
+		-algoritme uitvoeren per frame (geef motion mask terug)
+		-taak uitvoeren met motion mask:
+			-aantal objecten in mask tellen
+	-boek schrijven (2 dagen)
+-evaluatie applicatie maken (2+2 weken)
+	-implementatie andere MotDet algos zoeken (2 dagen)
+	-andere MotDet algos implementeren in wrapper zodat zelf input en output parameters gegeven worden (frame per frame input en motion mask output) (1 dag)
+	-iteratielus opzetten die output (mot mask) bewaart: (1 dag)
+		-per algoritme
+		-per frame
+	-data calculatie: (1 week)
+		-welke informatie/statistieken zijn nuttig?
+		-iteratielus die cijfers berekend en wegschrijft naar 
+	-boek schrijven (2 weken)
+
+> 8.5 weken vanaf 41.5e week >> tem week 49 (5/12-11/12)
+	> +- 3 weken bufferruimte & extra
+	> +- 3 weken boek 'puntjes op de i' + examens
+
+30/11/2016	:	eerste 25 pagina's laten nalezen (richtlijn)
+09/01/2017	:	1e versie (99%) laten nalezen (richtlijn)
+15/01/2017	:	(half januari!) scriptie indienen
+30/01/2017 - 04/02/2017	:	openbare verdediging

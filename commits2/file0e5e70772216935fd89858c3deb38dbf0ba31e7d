@@ -1,0 +1,428 @@
+#include "gmodel.h"
+
+
+GModel::GModel(int w, int h, double a_bg, double a_cdetect, double trL, double trH) : alfa_bg(a_bg),alfa_cd(a_cdetect),tr_low(trL),tr_high(trH)
+{
+	//abs_diff=cvCreateImage(cvSize(w,h),IPL_DEPTH_32F,1);
+	bg=cvCreateImage(cvSize(w,h),IPL_DEPTH_32F,1);
+	cd=cvCreateImage(cvSize(w,h),IPL_DEPTH_32F,1);
+
+	cvSetZero(bg);
+	cvSetZero(cd);
+
+	prev_fr1=cvCreateImage(cvSize(w,h),IPL_DEPTH_8U,1);
+	prev_fr2=cvCreateImage(cvSize(w,h),IPL_DEPTH_8U,1);
+
+	
+	fgmask=cvCreateImage(cvSize(w,h),IPL_DEPTH_8U,1);
+	cdmask=cvCreateImage(cvSize(w,h),IPL_DEPTH_8U,1);
+	cvSetZero(fgmask);
+	cvSetZero(cdmask);
+
+	tmp_8u=cvCreateImage(cvSize(w,h),IPL_DEPTH_8U,1);
+	cvSetZero(tmp_8u);
+	//tmp2_8u=cvCreateImage(cvSize(w,h),IPL_DEPTH_8U,1);
+	//cvSetZero(tmp2_8u);
+	tmp_32f=cvCreateImage(cvSize(w,h),IPL_DEPTH_32F,1);
+	cvSetZero(tmp_32f);
+
+	called=0;
+	morph=cvCreateStructuringElementEx(5,5,2,2,CV_SHAPE_ELLIPSE);
+	morph2=cvCreateStructuringElementEx(3,3,1,1,CV_SHAPE_ELLIPSE);
+	brojac=0;
+};
+GModel::~GModel()
+{
+	cvReleaseStructuringElement(&morph2);
+	cvReleaseStructuringElement(&morph);
+	cvReleaseImage(&bg);
+	cvReleaseImage(&cd);
+	cvReleaseImage(&prev_fr1);
+	cvReleaseImage(&prev_fr2);
+	
+	cvReleaseImage(&fgmask);
+	cvReleaseImage(&cdmask);
+	cvReleaseImage(&tmp_8u);
+	//cvReleaseImage(&tmp2_8u);
+	cvReleaseImage(&tmp_32f);
+};
+
+// funkcije za preprocesiranje zbog raznish sumova
+void GModel::preprocess(IplImage* in)
+{
+	//prefiltriranje ulaznog frama - zbog losek interlisinga
+	cvSmooth(in, in, CV_GAUSSIAN, 5, 5);
+	//cvSmooth(in, in, CV_BILATERAL, 5, 5);
+	//morfolosko filtriranje tri uzastopna frejma -
+	//trebalo bi da sluzi necemu kad pada sneg
+	
+	temp_filt(in);
+};
+
+void GModel::temp_filt(IplImage* in)
+{
+	IplImage* tmp;
+	if (called){
+		cvMin(prev_fr2,in,tmp_8u);
+		cvMin(prev_fr1,tmp_8u,tmp_8u);
+
+		//zameni 1 i 2
+		tmp=prev_fr2;
+		prev_fr2=prev_fr1;
+		prev_fr1=tmp;
+
+		cvCopy(in,prev_fr1);
+		cvCopy(tmp_8u,in);
+	}
+	else{
+		cvCopy(in,prev_fr1);
+		cvCopy(in,prev_fr2);
+	}
+};
+//sporija je od filter_small_regions2 - verovatno zato sto prolazi kroz oba nivoa hijerarhije koju vraca cvFindContours
+void GModel::filter_small_regions(IplImage *img, IplConvKernel* element=NULL, int perform_morph=0, int minArea=10, int minWholeArea=0 ,int bez_rupa=1)
+{
+	CvSeq *first_seq = NULL, *prev_seq = NULL, *seq = NULL;
+	CvMemStorage *storage = cvCreateMemStorage();
+
+	CvSeq* contour = 0;
+	CvSeq* contour2 = 0;
+	CvScalar color = CV_RGB(255,255,255);
+	
+	if(perform_morph)
+	{
+		cvMorphologyEx(img, img, 0, element, CV_MOP_CLOSE, 1 );
+		cvMorphologyEx(img, img, 0, element, CV_MOP_OPEN, 1 );
+	}
+	
+	cvFindContours( img, storage, &first_seq, sizeof(CvContour), CV_RETR_CCOMP, CV_CHAIN_APPROX_NONE);
+	cvZero(img);
+	for( contour=first_seq ; contour != 0; contour = contour->h_next )
+	{
+		if (contour->v_next!=0)
+		{
+			for( contour2=contour->v_next; contour2 != 0; contour2 = contour2->h_next )
+			{
+				if ((bez_rupa)||(cvContourArea(contour2)<minWholeArea))
+				{
+					cvDrawContours(img, contour2, color, color, 0, CV_FILLED);
+				}
+			}
+		}
+		if (fabs(cvContourArea(contour))>minArea)
+			cvDrawContours(img, contour, color, color, -1, CV_FILLED);
+	}
+
+	cvClearMemStorage(storage);
+cvReleaseMemStorage(&storage);
+}
+
+//pretpostavlja da postoje samo objekti bez rupa - brze radi od filter_small_regions
+void GModel::filter_small_regions_closeHoles(IplImage *img, IplConvKernel* element=NULL, int perform_morph=0, int minArea=10)
+{
+	CvSeq *first_seq = NULL, *prev_seq = NULL, *seq = NULL;
+	CvMemStorage *storage = cvCreateMemStorage();
+
+	CvScalar color = CV_RGB(255,255,255);
+	
+	if(perform_morph)
+	{
+		cvSmooth(img,tmp_8u,CV_MEDIAN,7);
+		cvOr(img,tmp_8u,img);
+
+		//cvMorphologyEx(img, img, 0, element, CV_MOP_CLOSE, 1 );
+		//ovo mozda ne treba je ce mali objekti svkakoa biti izbrisani
+		cvMorphologyEx(img, img, 0, element, CV_MOP_OPEN, 1 );
+	}
+	
+	cvFindContours( img, storage, &first_seq, sizeof(CvContour), CV_RETR_CCOMP, CV_CHAIN_APPROX_NONE);
+
+	if(minArea > 0)
+	{
+		for( seq = first_seq; seq; seq = seq->h_next )
+		{
+			CvContour* cnt = (CvContour*)seq;
+			if(fabs(cvContourArea(cnt))<minArea)
+			{
+            //delete small contour
+				prev_seq = seq->h_prev;
+				if(prev_seq)
+				{
+					prev_seq->h_next = seq->h_next;
+					if(seq->h_next) seq->h_next->h_prev = prev_seq;
+				}
+				else
+				{
+					first_seq = seq->h_next;
+					if( seq->h_next ) seq->h_next->h_prev = NULL;
+				}
+			}
+		}
+	}
+	cvZero(img);
+	for(seq=first_seq; seq != 0; seq = seq->h_next )
+	{
+		cvDrawContours(img,seq,color,color,0,CV_FILLED);
+	}
+	cvClearMemStorage(storage);
+	cvReleaseMemStorage(&storage);
+}
+
+//osnovna zamisao - lose jer ima dva tresholda koji se moraju zadati
+//ali radi bolje od bilo cega drugog!!! trH=2*trL
+void GModel::hist_tr(IplImage* in, IplImage* model, IplImage* out)
+{
+	//cvNamedWindow("low", 0);
+	//cvNamedWindow("high", 0);
+
+	cvSetZero(tmp_32f);
+	cvSetZero(tmp_8u);
+	cvConvertScale(in, tmp_32f);
+	cvAbsDiff(model, tmp_32f, tmp_32f);
+	
+	cvThreshold(tmp_32f,tmp_8u,tr_high,255,CV_THRESH_BINARY);
+	cvThreshold(tmp_32f,out,tr_low,255,CV_THRESH_BINARY);
+
+	//cvShowImage("low", out);
+	//cvShowImage("high", tmp_8u);
+	//cvWaitKey(100);
+	//if (brojac==260)
+	//{
+	//	cvSaveImage("low.jpg", out);
+	//	cvSaveImage("high.jpg", tmp_8u);
+	//}
+	cvDilate(tmp_8u,tmp_8u,morph2,1);
+	cvAnd(tmp_8u,out,out);
+
+	brojac++;
+};
+void GModel::hist_trCD(IplImage* in, IplImage* model, IplImage* out)
+{
+	cvSetZero(tmp_32f);
+	cvSetZero(tmp_8u);
+	cvConvertScale(in, tmp_32f);
+	cvAbsDiff(model, tmp_32f, tmp_32f);
+	
+	cvThreshold(tmp_32f,tmp_8u,tr_high,255,CV_THRESH_BINARY);
+	cvThreshold(tmp_32f,out,tr_low,255,CV_THRESH_BINARY);
+
+
+
+	cvDilate(tmp_8u,tmp_8u,morph,1);
+	cvAnd(tmp_8u,out,out);
+	//dodatno povecava out u odnosu na hist_tr
+	//iskljuciti kad se meri brzina
+	cvDilate(out,out,morph,1);
+};
+
+void GModel::hist_trCDsimple(IplImage* in, IplImage* model, IplImage* out)
+{
+	cvSetZero(tmp_32f);
+	//cvSetZero(tmp_8u);
+	cvConvertScale(in, tmp_32f);
+	cvAbsDiff(model, tmp_32f, tmp_32f);
+	
+	//cvThreshold(tmp_32f,tmp_8u,tr_high,255,CV_THRESH_BINARY);
+	cvThreshold(tmp_32f,out,tr_low,255,CV_THRESH_BINARY);
+
+	//cvDilate(tmp_8u,tmp_8u,morph,1);
+	//cvAnd(tmp_8u,out,out);
+	//dodatno povecava out u odnosu na hist_tr
+	//iskljuciti kad se meri brzina
+	//cvDilate(out,out,morph,1);
+};
+
+//ovde su ubaceni adaptivni tresholdi - mnogo brlja
+void GModel::adaptive_tr(IplImage* in, IplImage* model, IplImage* out)
+{
+	cvSetZero(tmp_8u);
+
+	cvConvertScale(model, tmp_8u);
+	//////////////////////
+	cvAbsDiff(in, tmp_8u, tmp_8u);
+	int tr;
+	EstimTrRosin(tmp_8u,&tr);
+	
+	cvThreshold(tmp_8u,out,tr,255,CV_THRESH_BINARY);
+
+	//cout<<"estim tr = "<<tr<<endl;
+	cvSetZero(tmp_8u);
+};
+
+void GModel::update(IplImage* in)
+{
+	//preprocess(in);
+	if (called){
+		hist_tr(in,cd,cdmask);
+		//adaptive_tr(in,cd,cdmask);
+		
+		hist_tr(in,bg,fgmask);
+		cvMorphologyEx(cdmask, cdmask, tmp_8u,morph,CV_MOP_CLOSE,1);
+		cvMorphologyEx(cdmask, cdmask, tmp_8u,morph,CV_MOP_OPEN,1);
+
+		rafineFG(cdmask, fgmask, tmp_8u);
+		cvSmooth(fgmask,tmp_8u,CV_MEDIAN,5);
+		//zadrzavaju se promene sa bg na fg 0->1
+		cvOr(tmp_8u,fgmask,fgmask);
+		//blob_filt(fgmask);
+
+		
+		//cvMorphologyEx(fgmask, fgmask, tmp_8u, morph,CV_MOP_CLOSE,1);
+		//cvMorphologyEx(fgmask, fgmask, tmp_8u, morph2,CV_MOP_OPEN,1);
+		//shadowDetect(in, 0.7);
+
+		cvNot(fgmask,fgmask);
+		cvRunningAvg(in, bg, alfa_bg,fgmask);
+		cvNot(fgmask,fgmask);
+		cvRunningAvg(in, bg, 0,fgmask);
+
+		cvRunningAvg(in, cd, alfa_cd);
+	}
+	else{
+		cvRunningAvg(in, bg, 1);
+		cvRunningAvg(in, cd, 1);
+		called=1;
+	}
+};
+
+//slicno kao i update  - napravljeno da bi mogli modeli da se paralelno porede
+//ovde je algoritam koji radi posao
+void GModel::update2(IplImage* in)
+{
+
+	//preprocess(in);
+	if (called){
+		//hist_tr(in,cd,cdmask);
+		//hist_trCD(in,cd,cdmask);
+
+		hist_trCDsimple(in,cd,cdmask);//samo lowTr
+
+		//filter_small_regions(cdmask,morph,1,30);
+		//filter_small_regions(cdmask,morph,1,30,500,0);
+
+		//bez morph, sve sto je <30 bice obrisano, rupe unutar fg takodje
+		filter_small_regions_closeHoles(cdmask,morph2,0,30);
+
+		//adaptive_tr(in,bg,fgmask);
+
+		hist_tr(in,bg,fgmask);
+		//sa rupom koja moze bici veca od 1000 piksela
+		//filter_small_regions(fgmask,morph,1,10,1000,0);
+		//filter_small_regions(fgmask,morph,1,10);
+
+		//cvMorphologyEx(cdmask, cdmask, tmp_8u,morph,CV_MOP_CLOSE,1);
+		//cvMorphologyEx(cdmask, cdmask, tmp_8u,morph,CV_MOP_OPEN,1);
+
+		//cvMorphologyEx( cdmask, cdmask, 0, 0, CV_MOP_OPEN, 1 );
+		//cvMorphologyEx( cdmask,cdmask, 0, 0, CV_MOP_CLOSE, 1 );
+
+		//rafineFG(cdmask, fgmask, tmp_8u);
+		rafineFG_noExt(cdmask, fgmask, tmp_8u);
+
+		//ova funkcija je jao spora a izgleda da nije neophodna
+		//cvSmooth(fgmask,tmp_8u,CV_MEDIAN,5);
+		//zadrzavaju se promene sa bg na fg 0->1
+		//cvOr(tmp_8u,fgmask,fgmask);
+		//blob_filt(fgmask);
+		
+		filter_small_regions_closeHoles(fgmask,morph2,1,30);
+		
+		//cvMorphologyEx(fgmask, fgmask, 0, morph2 ,CV_MOP_CLOSE,1);
+		//cvMorphologyEx(fgmask, fgmask, tmp_8u, morph2,CV_MOP_OPEN,1);
+		//shadowDetect(in, 0.7);
+
+		cvNot(fgmask,fgmask);
+		cvRunningAvg(in, bg, alfa_bg,fgmask);
+		cvNot(fgmask,fgmask);
+		cvRunningAvg(in, bg, 0,fgmask);
+
+		cvRunningAvg(in, cd, alfa_cd);
+	}
+	else{
+		cvRunningAvg(in, bg, 1);
+		cvRunningAvg(in, cd, 1);
+		called=1;
+	}
+};
+
+void GModel::rafineFG(IplImage* d1, IplImage* d2, IplImage* tmp)
+{
+	cvSetZero(tmp);
+	
+	IplConvKernel* m;
+	m=cvCreateStructuringElementEx(7,7,3,3,CV_SHAPE_ELLIPSE);
+	cvCopy(d1,tmp);
+	//ako se izbaci dilatacija radi par frejmova brze
+	cvDilate(tmp,tmp,morph,1);
+	cvAnd(tmp,d2,d2);
+
+	cvSetZero(tmp);
+	cvReleaseStructuringElement( &m );
+};
+
+//samo poklopi d2 sa d1 bez morforlogije
+void GModel::rafineFG_noExt(IplImage* d1, IplImage* d2, IplImage* tmp)
+{
+	//cvSetZero(tmp);
+	
+	//IplConvKernel* m;
+	//m=cvCreateStructuringElementEx(7,7,3,3,CV_SHAPE_ELLIPSE);
+	//cvCopy(d1,tmp);
+	//ako se izbaci dilatacija radi par frejmova brze
+	//cvDilate(tmp,tmp,morph,1);
+	cvAnd(d1,d2,d2);
+
+	//cvSetZero(tmp);
+	//cvReleaseStructuringElement( &m );
+};
+// ne radi uzeto iz nekog papira
+// Robust and Efficient Foreground Analysis for Real-time Video Surveillance
+// sa CVPR05
+/* 
+void GModel::shadowDetect(IplImage* in, double tr)
+{
+	int p_dim=9;
+	CvMat* p_bg = cvCreateMat(p_dim, p_dim, CV_32FC1);
+	CvMat* p_in = cvCreateMat(p_dim, p_dim, CV_32FC1);
+	CvRect rect;
+
+	cvSetZero(tmp_32f);
+	BwImageFloat i_tmp;
+	i_tmp=tmp_32f;
+
+	CvScalar e_xy=cvScalar(0);
+	CvScalar e_x=cvScalar(0);
+	CvScalar e_y=cvScalar(0);
+	CvScalar std_x=cvScalar(0);
+	CvScalar std_y=cvScalar(0);
+	
+	for(int j=0;j<(in->height)-p_dim+1;j++){
+		for(int i=0;i<(in->width)-p_dim+1;i++){
+			rect=cvRect(i,j,p_dim,p_dim);
+			cvSetImageROI(in,rect);
+			cvSetImageROI(bg,rect);
+			cvAvgSdv(in, &e_x, &std_x);
+			cvAvgSdv(bg, &e_y, &std_y);
+
+			cvConvert(in, p_in);
+			cvConvert(in, p_bg);
+			cvMul(p_bg,p_in,p_in);
+			e_xy=cvAvg(p_in);
+			
+			i_tmp[j+(p_dim/2)][i+(p_dim/2)]=
+					(e_xy.val[0]-(e_x.val[0]*e_y.val[0]))/(std_x.val[0]*std_y.val[0]);
+		}
+	}
+	cvThreshold(tmp_32f,tmp_8u,tr,255,CV_THRESH_BINARY);
+	//cvConvertScale(tmp_32f, tmp_8u, 10 , 0);
+
+	cvResetImageROI(in);
+	cvResetImageROI(bg);
+
+	cvReleaseMat(&p_bg);
+	cvReleaseMat(&p_in);
+	cvSetZero(tmp_32f);
+}; */
+
+
+

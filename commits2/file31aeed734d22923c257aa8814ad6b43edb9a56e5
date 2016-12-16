@@ -1,0 +1,33 @@
+# The set of languages for which implicit dependencies are needed:
+SET(CMAKE_DEPENDS_LANGUAGES
+  "CXX"
+  )
+# The set of files for implicit dependencies of each language:
+SET(CMAKE_DEPENDS_CHECK_CXX
+  "/home/tim/Documents/Thesis/Denoising & Background Subtraction/denoise/Gamma.cpp" "/home/tim/Documents/Thesis/Denoising & Background Subtraction/denoise/CMake/CMakeFiles/mcwf.dir/Gamma.cpp.o"
+  "/home/tim/Documents/Thesis/Denoising & Background Subtraction/denoise/avi.cc" "/home/tim/Documents/Thesis/Denoising & Background Subtraction/denoise/CMake/CMakeFiles/mcwf.dir/avi.cc.o"
+  "/home/tim/Documents/Thesis/Denoising & Background Subtraction/denoise/frame.cc" "/home/tim/Documents/Thesis/Denoising & Background Subtraction/denoise/CMake/CMakeFiles/mcwf.dir/frame.cc.o"
+  "/home/tim/Documents/Thesis/Denoising & Background Subtraction/denoise/mcwf.cc" "/home/tim/Documents/Thesis/Denoising & Background Subtraction/denoise/CMake/CMakeFiles/mcwf.dir/mcwf.cc.o"
+  "/home/tim/Documents/Thesis/Denoising & Background Subtraction/denoise/metools.cc" "/home/tim/Documents/Thesis/Denoising & Background Subtraction/denoise/CMake/CMakeFiles/mcwf.dir/metools.cc.o"
+  "/home/tim/Documents/Thesis/Denoising & Background Subtraction/denoise/mme.cc" "/home/tim/Documents/Thesis/Denoising & Background Subtraction/denoise/CMake/CMakeFiles/mcwf.dir/mme.cc.o"
+  "/home/tim/Documents/Thesis/Denoising & Background Subtraction/denoise/noiseest.cc" "/home/tim/Documents/Thesis/Denoising & Background Subtraction/denoise/CMake/CMakeFiles/mcwf.dir/noiseest.cc.o"
+  "/home/tim/Documents/Thesis/Denoising & Background Subtraction/denoise/riff.cc" "/home/tim/Documents/Thesis/Denoising & Background Subtraction/denoise/CMake/CMakeFiles/mcwf.dir/riff.cc.o"
+  "/home/tim/Documents/Thesis/Denoising & Background Subtraction/denoise/sf.cc" "/home/tim/Documents/Thesis/Denoising & Background Subtraction/denoise/CMake/CMakeFiles/mcwf.dir/sf.cc.o"
+  "/home/tim/Documents/Thesis/Denoising & Background Subtraction/denoise/tools.cc" "/home/tim/Documents/Thesis/Denoising & Background Subtraction/denoise/CMake/CMakeFiles/mcwf.dir/tools.cc.o"
+  "/home/tim/Documents/Thesis/Denoising & Background Subtraction/denoise/wavelet.cc" "/home/tim/Documents/Thesis/Denoising & Background Subtraction/denoise/CMake/CMakeFiles/mcwf.dir/wavelet.cc.o"
+  "/home/tim/Documents/Thesis/Denoising & Background Subtraction/denoise/wf.cc" "/home/tim/Documents/Thesis/Denoising & Background Subtraction/denoise/CMake/CMakeFiles/mcwf.dir/wf.cc.o"
+  )
+SET(CMAKE_CXX_COMPILER_ID "GNU")
+
+# Targets to which this target links.
+SET(CMAKE_TARGET_LINKED_INFO_FILES
+  )
+
+# The include file search paths:
+SET(CMAKE_C_TARGET_INCLUDE_PATH
+  "/usr/local/include/opencv"
+  "/usr/local/include"
+  )
+SET(CMAKE_CXX_TARGET_INCLUDE_PATH ${CMAKE_C_TARGET_INCLUDE_PATH})
+SET(CMAKE_Fortran_TARGET_INCLUDE_PATH ${CMAKE_C_TARGET_INCLUDE_PATH})
+SET(CMAKE_ASM_TARGET_INCLUDE_PATH ${CMAKE_C_TARGET_INCLUDE_PATH})

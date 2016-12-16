@@ -1,0 +1,23 @@
+#include "avi.h"
+#include <math.h>
+
+
+#define BWW 0
+
+void GetAD(tFrame*,double*, int, int,double);
+void GetAD_Rescaled(tFrame*,double *,int,int);
+void PutImageIntoArray(tFrame*, double *,int,int);
+double Calulate_PSNR(tFrame*,tFrame*,int,int);
+void UpDateMemory(double *,double *,double *,double *,double *,double *,double *,double *,int,int);
+void MultiplyCoefficients(double*,double*,double*,double*,double*,double*,int,int,double);
+void PutCoefficientsIRO(double *,int,int,int,int);
+void PutBackCoefficientsIRO(double *,int,int,int,int);
+void PutImageIntoArrayC(tFrame*, double*, int,int,int);
+void Convert_RGBtoYUV(double *,double *,double *,int,int,double *,double *,double *);
+void Convert_YUVtoRGB(double *R, double *G, double *B, int width, int height, double *Y, double *U, double *V);
+void GetADC(tFrame* image,double *R,double *G, double *B,int NX, int NY);
+double Calulate_PSNRC(tFrame* out_image,tFrame* orig_image,int width,int height);
+void UpDateMemory2(double *U,double *V,double *UP,double* VP,int M,int N);
+double Calulate_PSNR_A(double *YS,double *X,int width,int height);
+void Upsample(double *X1, int width, int, double*);
+void Subsample(double *X1, int width, int, double*);

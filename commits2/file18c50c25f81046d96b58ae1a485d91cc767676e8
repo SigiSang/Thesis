@@ -1,0 +1,26 @@
+#include "avi.h"
+#include<math.h>
+
+#define THRESH 0
+#define BS 8
+
+#define BSPI 8
+#define BSPII BSPI/2
+#define BSPIII BSPI/4
+
+#define BSP BS/2
+#define BSQ BS/4
+
+struct V2D {int x; int y;};
+
+void WriteArrayToFrame(int *,tFrame *,int,int);
+void  NormalFrameResolution(tFrame*,int,int,int*);
+void  PutMotionVectorsInFrame(tFrame*, V2D*, int, int);  
+void  GetADRed(tFrame*,double*, int, int,int);
+void CopyFrame(tFrame*,tFrame*,int,int);
+void PutAmplitudeOfTheMotion(tFrame*,V2D*,int,int);
+void ErrorSequence(tFrame*,tFrame*,tFrame*,int,int);
+void FrameToFrame(int *,int *,int,int);
+void PutRAM(tFrame*,double*,int,int);
+double RAM_statistics(double*,int,int,FILE*,int);
+double VAR_PIC(double *,int,int,int);

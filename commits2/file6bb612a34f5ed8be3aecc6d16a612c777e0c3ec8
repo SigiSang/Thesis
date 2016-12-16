@@ -1,0 +1,605 @@
+#include "mcwf.h"
+
+#define MAX_BUFFER_SIZE 200
+#define WDW 0.25
+#define WMW 4.
+
+double __HWTIME=0;
+
+double Mcwf::getTime(){
+        time_t t;
+        time(&t);
+        double x=(double)t;
+        return x;
+}
+
+void Mcwf::tic(){
+        __HWTIME=getTime();
+}
+
+void Mcwf::toc(){
+        double x=getTime();
+        double diff=x-__HWTIME;
+        cout <<"\n-->" << diff << " seconds elapsed"<<endl;
+        __HWTIME=x;
+}
+
+void Mcwf::Frame2Array(IplImage* image, double* LL, int chan)
+{
+	int origwidth = image->width;
+	int origheight = image->height;
+	int width = image->width;
+	int height = image->height;	
+	for (int yy=0; yy<height; yy++)
+	{
+		for (int xx=0; xx<width; xx++)
+		{	
+			int x = xx;			
+			int y = yy;
+			CvScalar p = cvGet2D(image, y, x);
+			double R = p.val[chan];
+			LL [yy*width + xx] = (double)((int)(R));
+		}
+	}
+}
+
+void Mcwf::Frame2IArray(IplImage* image, int* LL, int chan)
+{
+	int origwidth = image->width;
+	int origheight = image->height;
+	int width = image->width;
+	int height = image->height;	
+	for (int yy=0; yy<height; yy++)
+	{
+		for (int xx=0; xx<width; xx++)
+		{	
+			int x = xx;			
+			int y = yy;
+			CvScalar p = cvGet2D(image, y, x);
+			double R = p.val[chan];
+			LL [yy*width + xx] = (int)(R);
+		}
+	}
+}
+
+void Mcwf::Sqr2Frame(IplImage* image, IplImage* oimage)
+{
+	for (int yy=0; yy<image->height; yy++)
+	{
+		for (int xx=0; xx<image->width; xx++)
+		{		
+			CvScalar q,p = cvGet2D(image, yy, xx);
+			q.val[0]=sqrt(p.val[0]);
+			q.val[1]=sqrt(p.val[1]);
+			q.val[2]=sqrt(p.val[2]);
+			cvSet2D(oimage,yy,xx,q);
+		}
+	}
+}
+
+void Mcwf::SqrdFrame(double* in, double* oim, int width, int height)
+{
+	for (int yy=0; yy<height; yy++)
+	{
+		for (int xx=0; xx<width; xx++)
+		{
+			oim [yy*width + xx]=pow(in[yy*width + xx]/16.,2.);			
+		}
+	}
+}
+
+void Mcwf::init(int n, int w, int h){
+  nframes = n;
+  width = w;
+  height = h;
+
+  fpLap_p = fopen(FN_LAP_P.c_str(),"r"); // for the DEN_link alg
+  fpLap_kurtosis = fopen(FN_LAP_K.c_str(),"r"); //  for the DEN_link alg
+
+  Lap_p = new double[MAX_BUFFER_SIZE];
+  Lap_kurtosis = new double[MAX_BUFFER_SIZE];
+  float temp;
+
+  ////////////////////////////////////////////////////////
+  //OpenCV
+  /* TR Start *
+  *noisy_video = cvCaptureFromFile(avi_in); 
+  if (noisy_video == NULL){
+    fprintf(stderr, "Error: Can't open noisy video.\n");
+    return;
+  } 
+  *nfree_video = cvCaptureFromFile(avi_orig); 
+  if (nfree_video == NULL){
+    fprintf(stderr, "Error: Can't open original video.\n");
+    return;
+  }
+  /* TR End */
+
+  CvSize frame_size;
+  frame_size.height = height;
+  frame_size.width = width;
+
+  nframe = cvCreateImage(frame_size, IPL_DEPTH_32F, 3);
+  rframe = cvCreateImage(frame_size, IPL_DEPTH_32F, 3);
+  cframe = cvCreateImage(frame_size, IPL_DEPTH_32F, 3);
+  pframe = cvCreateImage(frame_size, IPL_DEPTH_32F, 3);
+  //////////////////////////////////////////////////////////
+  //////////////////////////////////////////////////////////
+
+  int numb=0,numbk=0; // counters of the size of table array
+  if (fpLap_p == NULL)        { cout<<"Can't open file "<<FN_LAP_P<<endl; exit(1);}
+  if (fpLap_kurtosis == NULL) { cout<<"Can't open file "<<FN_LAP_K<<endl; exit(1);}
+
+  while(fscanf(fpLap_p,"%f",&temp)!=EOF)
+    Lap_p[numb] = (double)temp; numb++; // putting the data from the file into an array
+  while(fscanf(fpLap_kurtosis,"%f",&temp)!=EOF)
+    Lap_kurtosis[numbk] = (double)temp;numbk++; // putting the data from the file into an array
+
+  cout<<width<<"\t"<<height<<endl;   
+
+  frame_stf = new tFrame(width,height);     //   output-Temporal+Spatial frames seq
+
+  frame_outY = new tFrame(width,height);  // luminance
+  frame_origY = new tFrame(width,height);  // original luminance
+
+  frame_mv = new tFrame(width,height);     //   output-Spatial frames seq
+  tFrame* frame_dif = new tFrame(width,height);     //   output-Temporal+Spatial frames seq
+
+  frame_hh = new tFrame(width,height);    
+  frame_hl = new tFrame(width,height);
+  frame_lh = new tFrame(width,height);   
+  frame_ll = new tFrame(width,height); 
+
+  frame_hh2 = new tFrame(width,height);    
+  frame_lh2 = new tFrame(width,height);
+  frame_hl2 = new tFrame(width,height);   
+  frame_ll2 = new tFrame(width,height);
+
+  frame_hhU = new tFrame(width/2,height/2);    
+  frame_hlU = new tFrame(width/2,height/2);
+  frame_lhU = new tFrame(width/2,height/2);   
+  frame_llU = new tFrame(width/2,height/2); 
+
+  frame_hhV = new tFrame(width/2,height/2);    
+  frame_hlV = new tFrame(width/2,height/2);
+  frame_lhV = new tFrame(width/2,height/2);   
+  frame_llV = new tFrame(width/2,height/2); 
+
+  if(GENERATE_OUTPUT){
+    seq_outST.Write(avi_outST.c_str(),nframes,width,height);
+    seq_mv.Write(avi_outMVF.c_str(),nframes,width,height);
+  }
+
+  cout<<"Reading frames..."<<endl;
+
+  NX = width/BS;                                // number of blocks in normal-resolution in horizontal direction
+  NY = height/BS;                               // number of blocks in normal-resolution in vertical direction
+
+  cout<<NX<<"\t"<<NY<<endl;
+
+  D = new V2D[NX*NY]; //  motion vectors for blocks
+
+  for(int s=0;s<NX*NY;s++) D[s].x = D[s].y = 0;  // initializing motion vectors 
+
+  madU0    = new double[NX*NY];  // MADU0 with zero vectors 
+  madV0  = new double[NX*NY];    // MADV0 with zero vectors 
+  madV  = new double[NX*NY];     // MADV with zero vectors
+  madU  = new double[NX*NY];     // MADU with zero vectors 
+
+  mad0    = new double[NX*NY]; // MAD with zero vectors 
+  mad0LL  = new double[NX*NY]; // MADLL with zero vectors 
+  mad0LH  = new double[NX*NY]; // MADLH with zero vectors
+  mad0HL  = new double[NX*NY]; // MADHL with zero vectors 
+  mad0HH  = new double[NX*NY]; // MADHH with zero vectors
+
+  madLL  = new double[NX*NY]; // MADLL with estimated vectors 
+  madLH  = new double[NX*NY]; // MADLH with estimated vectors 
+  madHL  = new double[NX*NY]; // MADHL with estimated vectors 
+  madHH  = new double[NX*NY]; // MADHH with estimated vectors 
+
+  mad0LL2  = new double[NX*NY]; // MADLL with zero vectors 
+  mad0LH2  = new double[NX*NY]; // MADLH with zero vectors
+  mad0HL2  = new double[NX*NY]; // MADHL with zero vectors 
+  mad0HH2  = new double[NX*NY]; // MADHH with zero vectors
+
+  madLL2  = new double[NX*NY]; // MADLL with estimated vectors 
+  madLH2  = new double[NX*NY]; // MADLH with estimated vectors 
+  madHL2  = new double[NX*NY]; // MADHL with estimated vectors 
+  madHH2  = new double[NX*NY]; // MADHH with estimated vectors
+
+  madLLs  = new double[nframes]; // MADLL with zero vectors 
+  madLHs  = new double[nframes]; // MADLH with zero vectors
+  madHLs  = new double[nframes]; // MADHL with zero vectors 
+  madHHs  = new double[nframes]; // MADHH with zero vectors
+
+  madLL2s  = new double[nframes]; // MADLL with estimated vectors 
+  madLH2s  = new double[nframes]; // MADLH with estimated vectors 
+  madHL2s  = new double[nframes]; // MADHL with estimated vectors 
+  madHH2s  = new double[nframes]; // MADHH with estimated vectors 
+
+  for(int i=0;i<nframes;i++) madLLs[i] = madLHs[i] = madHLs[i] = madHHs[i] = madLL2s[i] = madLH2s[i] = madHL2s[i] = madHH2s[i] = 0.; 
+
+  X = new double[width*height];  // buffer for current input frame - luminance (noisy sequence)
+  U = new double[width*height/4]; 
+  V = new double[width*height/4];
+  /* TR START uitval nfree_video *    
+  XOP = new double[width*height]; 
+
+  XO = new double[width*height];  // buffer for current input frame - luminance (original sequence)
+  /* TR END */
+  /* TR START *    
+  UO = new double[width*height/4]; 
+  VO = new double[width*height/4];
+  /* TR END */
+
+  UP = new double[width*height/4]; 
+  VP = new double[width*height/4];
+
+  R = new double[width*height]; // RGB color space (noisy sequence)
+  G = new double[width*height]; 
+  B = new double[width*height]; 
+
+  /* TR START uitval nfree_video *    
+  RO = new double[width*height]; // RGB color space (original sequence)
+  GO = new double[width*height]; 
+  BO = new double[width*height]; /* TR END */
+
+  XC = new int[width*height];  // buffer for current input frame
+  XP = new int[width*height];  // buffer for current input frame
+
+  UF = new double[width*height];  // buffer for current input frame
+  VF = new double[width*height];  // buffer for current input frame
+
+  /* TR START uitval nfree_video *    
+  UFO = new double[width*height];  // buffer for current input frame
+  VFO = new double[width*height];  // buffer for current input frame
+  /* TR END */
+
+  UM = new double[width*height];  // buffer for current input frame
+  VM = new double[width*height];  // buffer for current input frame 
+
+  LLUF = new double[width*height];  // buffer for current input frame 
+  LHUF = new double[width*height];  // buffer for current input frame
+  HLUF = new double[width*height];  // buffer for current input frame
+  HHUF = new double[width*height];  // buffer for current input frame
+
+  LLVF = new double[width*height];  // buffer for current input frame 
+  LHVF = new double[width*height];  // buffer for current input frame
+  HLVF = new double[width*height];  // buffer for current input frame
+  HHVF = new double[width*height];  // buffer for current input frame  
+
+  LL = new double[width*height]; // buffer for current input LL band
+  LH = new double[width*height]; // buffer for current input LH band
+  HL = new double[width*height]; // buffer for current input HL band
+  HH = new double[width*height]; // buffer for current input HH band
+  LL2 = new double[width*height]; // buffer for current input LL band
+  LH2 = new double[width*height]; // buffer for current input LH band
+  HL2 = new double[width*height]; // buffer for current input HL band
+  HH2 = new double[width*height]; // buffer for current input HH band
+
+  LLV = new double[width*height/4]; // buffer for current input LL band
+  LHV = new double[width*height/4]; // buffer for current input LH band
+  HLV = new double[width*height/4]; // buffer for current input HL band
+  HHV = new double[width*height/4]; // buffer for current input HH band
+  LL2V = new double[width*height/4]; // buffer for current input LL band
+  LH2V = new double[width*height/4]; // buffer for current input LH band
+  HL2V = new double[width*height/4]; // buffer for current input HL band
+  HH2V = new double[width*height/4]; // buffer for current input HH band
+
+  LLU = new double[width*height/4]; // buffer for current input LL band
+  LHU = new double[width*height/4]; // buffer for current input LH band
+  HLU = new double[width*height/4]; // buffer for current input HL band
+  HHU = new double[width*height/4]; // buffer for current input HH band
+  LL2U = new double[width*height/4]; // buffer for current input LL band
+  LH2U = new double[width*height/4]; // buffer for current input LH band
+  HL2U = new double[width*height/4]; // buffer for current input HL band
+  HH2U = new double[width*height/4]; // buffer for current input HH band
+
+  LLVP = new double[width*height/4]; // buffer for current input LL band
+  LHVP = new double[width*height/4]; // buffer for current input LH band
+  HLVP = new double[width*height/4]; // buffer for current input HL band
+  HHVP = new double[width*height/4]; // buffer for current input HH band
+  LL2VP = new double[width*height/4]; // buffer for current input LL band
+  LH2VP = new double[width*height/4]; // buffer for current input LH band
+  HL2VP = new double[width*height/4]; // buffer for current input HL band
+  HH2VP = new double[width*height/4]; // buffer for current input HH band
+
+  LLUP = new double[width*height/4]; // buffer for current input LL band
+  LHUP = new double[width*height/4]; // buffer for current input LH band
+  HLUP = new double[width*height/4]; // buffer for current input HL band
+  HHUP = new double[width*height/4]; // buffer for current input HH band
+  LL2UP = new double[width*height/4]; // buffer for current input LL band
+  LH2UP = new double[width*height/4]; // buffer for current input LH band
+  HL2UP = new double[width*height/4]; // buffer for current input HL band
+  HH2UP = new double[width*height/4]; // buffer for current input HH band 
+
+  LLO = new double[width*height]; // buffer for current input LL band
+  LHO = new double[width*height]; // buffer for current input LH band
+  HLO = new double[width*height]; // buffer for current input HL band
+  HHO = new double[width*height]; // buffer for current input HH band
+  LL2O = new double[width*height]; // buffer for current input LL band
+  LH2O = new double[width*height]; // buffer for current input LH band
+  HL2O = new double[width*height]; // buffer for current input HL band
+  HH2O = new double[width*height]; // buffer for current input HH band
+
+  LLP = new double[width*height]; // buffer for current input LL band
+  LHP = new double[width*height]; // buffer for current input LH band
+  HLP = new double[width*height]; // buffer for current input HL band
+  HHP = new double[width*height]; // buffer for current input HH band
+  LLP2 = new double[width*height]; // buffer for current input LL band
+  LHP2 = new double[width*height]; // buffer for current input LH band
+  HLP2 = new double[width*height]; // buffer for current input HL band
+  HHP2 = new double[width*height]; // buffer for current input HH band
+
+  alphaI = new double[NX*NY];
+  alphaII = new double[NX*NY]; 
+
+  YS = new double[width*height]; // buffer for current output (processed frame) in the base domain
+  YT = new double[width*height]; // buffer for current output (processed frame) in the base domain
+}
+
+bool Mcwf::hasNext(){
+  return idxNextFrame<nframes;
+}
+
+// TODO Output worden gegeven met src en dst.
+void Mcwf::next(const Mat& src, Mat& dst){
+  int i = idxNextFrame++;
+                  cout<<"Processing frame "<<i+1<<" of "<<nframes<<endl;
+                  ///////////////////////////////////
+                  //OpenCV
+/* TODO Not 32F depth but 8-bit */
+// cout<<"Array type: "<<nframe->depth<<endl;
+// cout<<"IPL_DEPTH_32F: "<<IPL_DEPTH_32F<<endl;
+                  *nframe = src;
+                  /* TR START uitval nfree_video *    
+                  nfree_video.read(temp);
+                  *cframe = temp; /* TR END */
+                  //Sqr2Frame(nframe, rframe);  
+                  //cvScale(rframe, nframe, 16.);
+                  // io::showImage("Noisy video", nframe);
+                  Frame2Array(nframe, R, 0);
+                  Frame2Array(nframe, G, 1);
+                  Frame2Array(nframe, B, 2);
+                  /* TR START uitval nfree_video *    
+                  Frame2Array(cframe, RO, 0);
+                  Frame2Array(cframe, GO, 1);
+                  Frame2Array(cframe, BO, 2); /* TR END */
+                  ///////////////////////////////////
+
+        Convert_RGBtoYUV(R,G,B,width,height,X,UF,VF); // X - luminance
+        /* TR START uitval nfree_video *    
+        Convert_RGBtoYUV(RO,GO,BO,width,height,XO,UFO,VFO); // X - luminance
+        /* TR END */
+
+    //************ DIRECT WAVELET TRANSFORM *****************************//
+
+      Wavelet_Image_Transform(X,HH,HL,LH,LL,i,width,height,0);       // direct wavelet transform for first scale
+      Wavelet_Image_Transform(LL,HH2,HL2,LH2,LL2,i,width,height,1);  // direct wavelet transform for second scale
+
+       Wavelet_Image_Transform(UF,HHUF,HLUF,LHUF,LLUF,i,width,height,0);       // direct wavelet transform for first scale
+       Wavelet_Image_Transform(VF,HHVF,HLVF,LHVF,LLVF,i,width,height,0);
+    
+          RenderingUV_spa(width,height,UF,VF,16.5,16.5);
+          Subsample(UF,width,height,U); Subsample(VF,width,height,V);
+
+       Wavelet_Image_Transform(U,HHU,HLU,LHU,LLU,i,width/2,height/2,0);
+       Wavelet_Image_Transform(V,HHV,HLV,LHV,LLV,i,width/2,height/2,0);  // direct wavelet transform for second scale  
+
+        //**************** Noise Estimation ***************************************//
+
+                  sigma = NoiseEstimationW(LL,LH,HL,HH,width,height,i,fp3);
+
+                  /* TR START (remove output clutter) *
+                      cout<<"sigma["<<i<<"] = "<<sigma<<endl; /* TR END */
+                      
+
+                  if(i>0) sigmaM = (sigma+sigmaM)/2.;
+                  else sigmaM = sigma;
+
+       /* TR START *
+
+         sigmaU = NoiseEstimationW(LLUF,LHUF,HLUF,HHUF,width,height,i,fp3);
+ 
+                          cout<<"sigmaU["<<i<<"] = "<<sigmaU<<endl;
+
+                     sigmaV = NoiseEstimationW(LLVF,LHVF,HLVF,HHVF,width,height,i,fp3);  
+  
+                         cout<<"sigmaV["<<i<<"] = "<<sigmaV<<endl;  
+
+           if(i>0) sigmaMU = (sigmaU+sigmaMU)/2.;
+           else sigmaMU = sigma;
+           if(i>0) sigmaMV = (sigmaV+sigmaMV)/2.;
+           else sigmaMV = sigmaV;
+
+          sigmaM = 21; //sigma
+            sigmaMU = sigmaMV = 0.66*sigmaM; // 6.5;
+
+                      cout<<"sigma["<<i<<"] = "<<sigmaM<<endl;
+                     cout<<"sigmaU["<<i<<"] = "<<sigmaMU<<endl;
+                     cout<<"sigmaV["<<i<<"] = "<<sigmaMV<<endl; 
+
+        /* TR END */
+
+               // ************* UNWRAPING COEFFIC.******************************** //
+
+                      PutCoefficientsIRO(LL,width,height,1,1);
+                PutCoefficientsIRO(HL,width,height,6,1);
+          PutCoefficientsIRO(LH,width,height,1,6);
+                PutCoefficientsIRO(HH,width,height,6,6);
+
+                      PutCoefficientsIRO(LL2,width,height,4,4);
+                      PutCoefficientsIRO(HL2,width,height,13,4);
+          PutCoefficientsIRO(LH2,width,height,4,13);
+                PutCoefficientsIRO(HH2,width,height,13,13);
+
+                        GetAD_Rescaled(frame_hh,HH,width,height); 
+                        GetAD_Rescaled(frame_hl,HL,width,height); 
+                        GetAD_Rescaled(frame_lh,LH,width,height); 
+                        GetAD_Rescaled(frame_ll,LL,width,height); 
+            
+                        GetAD_Rescaled(frame_hh2,HH2,width,height); 
+                        GetAD_Rescaled(frame_hl2,HL2,width,height); 
+                        GetAD_Rescaled(frame_lh2,LH2,width,height); 
+                        GetAD_Rescaled(frame_ll2,LL2,width,height); 
+
+                         PutCoefficientsIRO(LLU,width/2,height/2,0,0);
+                   PutCoefficientsIRO(HLU,width/2,height/2,3,0);
+             PutCoefficientsIRO(LHU,width/2,height/2,0,3);
+                   PutCoefficientsIRO(HHU,width/2,height/2,3,3);
+
+                       GetAD_Rescaled(frame_hhU,HHU,width/2,height/2); 
+                        GetAD_Rescaled(frame_hlU,HLU,width/2,height/2); 
+                        GetAD_Rescaled(frame_lhU,LHU,width/2,height/2); 
+                        GetAD_Rescaled(frame_llU,U,width/2,height/2); 
+            
+                        PutCoefficientsIRO(LLV,width/2,height/2,0,0);
+                  PutCoefficientsIRO(HLV,width/2,height/2,3,0);
+            PutCoefficientsIRO(LHV,width/2,height/2,0,3);
+                  PutCoefficientsIRO(HHV,width/2,height/2,3,3);
+
+
+                        GetAD_Rescaled(frame_hhV,HHV,width/2,height/2); 
+                        GetAD_Rescaled(frame_hlV,HLV,width/2,height/2); 
+                        GetAD_Rescaled(frame_lhV,LHV,width/2,height/2); 
+                        GetAD_Rescaled(frame_llV,V,width/2,height/2); 
+
+      /************* PROCESSING STEP *******************************************/
+
+      if(i==0){
+        UpDateMemory(HH,HL,LH,LL,HHP,HLP,LHP,LLP,width,height); 
+        UpDateMemory(HH2,HL2,LH2,LL2,HHP2,HLP2,LHP2,LLP2,width,height);
+
+        UpDateMemory2(U,V,UP,VP,width/2,height/2); //storing
+        UpDateMemory2(LLU,LLV,LLUP,LLVP,width/2,height/2); //storing
+        UpDateMemory2(LHU,LHV,LHUP,LHVP,width/2,height/2); //storing
+        UpDateMemory2(HLU,HLV,HLUP,HLVP,width/2,height/2); //storing
+        UpDateMemory2(HHU,HHV,HHUP,HHVP,width/2,height/2); //storing
+
+        /* TR START uitval nfree_video *    
+        UpDateMemory2(XO,XO,XOP,XOP,width,height); /* TR END */
+      }else{
+
+        /*motion estimation and temporal filtering ************************************************/
+
+        Frame2IArray(nframe, XC, 0);
+        Frame2IArray(pframe, XP, 0);
+        
+        for(int r=0;r<NY;r++)
+          for(int q=0;q<NX;q++){
+            s = r*NX + q;
+               
+            D[s] = SearchMotionVectorI(D,U,UP,LLU,LLUP,LHU,LHUP,HLU,HLUP,HHU,HHUP,V,VP,LLV,LLVP,LHV,LHVP,HLV,HLVP,HHV,HHVP,LL,LLP,HL,HLP,LH,LHP,HH,HHP,LL2,LLP2,HL2,HLP2,LH2,LHP2,HH2,HHP2,q,r,i,width,height,sigmaM,fp,fp2,frame_dif,madU0,madV0,mad0LL,mad0LH,mad0HL,mad0HH,madLL,madLH,madHL,madHH,mad0LL2,mad0LH2,mad0HL2,mad0HH2,madLL2,madLH2,madHL2,madHH2,madU,madV);
+
+            madLLs[i]  += madLL[s];   madLHs[i] += madLH[s];   madHLs[i] += madHL[s];   madHHs[i] += madHH[s];
+            madLL2s[i] += madLL2[s]; madLH2s[i] += madLH2[s]; madHL2s[i] += madHL2[s]; madHH2s[i] += madHH2[s];
+          }
+
+        madLLs[i]  /= (NX*NY);  madLHs[i] /= (NX*NY);  madHLs[i] /= (NX*NY);   madHHs[i] /= (NX*NY);
+        madLL2s[i] /= (NX*NY); madLH2s[i] /= (NX*NY); madHL2s[i] /= (NX*NY);  madHH2s[i] /= (NX*NY);
+
+        PutMotionVectorsInFrame(frame_mv,D,width,height); // putting vectors into the frame for visual tracking
+
+         TempUpDateMemoryI(D,i,width,height,sigmaM,madLL,madLH,madHL,madHH,madLL2,madLH2,madHL2,madHH2,madU,madV,
+                    LL,LH,HL,HH,LLP,LHP,HLP,HHP,LL2,LH2,HL2,HH2,LLP2,LHP2,HLP2,HHP2,U,UP,V,VP,fp5,alphaI,Variance);
+
+      UpDateMemory(HH,HL,LH,LL,HHP,HLP,LHP,LLP,width,height); //storing previously processed frame and for current temp-out frame
+      UpDateMemory(HH2,HL2,LH2,LL2,HHP2,HLP2,LHP2,LLP2,width,height); //storing
+
+      UpDateMemory2(U,V,UP,VP,width/2,height/2); //storing  
+            /* TR START uitval nfree_video *    
+            UpDateMemory2(XO,XO,XOP,XOP,width,height); /* TR END */
+
+                           UpDateMemory2(LLU,LLV,LLUP,LLVP,width/2,height/2); //storing
+                         UpDateMemory2(LHU,LHV,LHUP,LHVP,width/2,height/2); //storing
+                           UpDateMemory2(HLU,HLV,HLUP,HLVP,width/2,height/2); //storing
+                           UpDateMemory2(HHU,HHV,HHUP,HHVP,width/2,height/2); //storing
+
+       }//else
+     
+  //*********** WRAPING  BACK PROCESSED COEFFICIENTS********************************//
+
+  PutBackCoefficientsIRO(LL,width,height,1,1);
+  PutBackCoefficientsIRO(HL,width,height,6,1);
+  PutBackCoefficientsIRO(LH,width,height,1,6);
+  PutBackCoefficientsIRO(HH,width,height,6,6);
+  PutBackCoefficientsIRO(LL2,width,height,4,4);
+  PutBackCoefficientsIRO(HL2,width,height,13,4);
+  PutBackCoefficientsIRO(LH2,width,height,4,13);
+  PutBackCoefficientsIRO(HH2,width,height,13,13);
+
+  PutBackCoefficientsIRO(LLU,width/2,height/2,0,0);
+  PutBackCoefficientsIRO(HLU,width/2,height/2,3,0);
+  PutBackCoefficientsIRO(LHU,width/2,height/2,0,3);
+  PutBackCoefficientsIRO(HHU,width/2,height/2,3,3);
+
+  PutBackCoefficientsIRO(LLV,width/2,height/2,0,0);
+  PutBackCoefficientsIRO(HLV,width/2,height/2,3,0);
+  PutBackCoefficientsIRO(LHV,width/2,height/2,0,3);
+  PutBackCoefficientsIRO(HHV,width/2,height/2,3,3);
+
+  Upsample(U,width,height,UF); Upsample(V,width,height,VF);
+
+  /****************************************************************************/
+
+  Rendering_MADB(width,height,LH,HL,HH,madLH,madHL,madHH,madU,madV,NX,BS,1,sigma);        // spatial filtering 
+  Rendering_MADB(width,height,LH2,HL2,HH2,madLH2,madHL2,madHH2,madU,madV,NX,BS,1,sigma);  // spatial filtering
+
+  /*********************************************************************************************/
+
+  Mot_seq(D,width,height,UM,VM,NX);
+
+  Inverse_Wavelet_Image_Transform(LL,HH2,HL2,LH2,LL2,i,width,height,1);   // inverse wavelet transform for the second scale
+  Inverse_Wavelet_Image_Transform(YS,HH,HL,LH,LL,i,width,height,0);        // inverse wavelet transform for the first scale
+
+  GetAD(frame_origY,X,width,height,0.);
+
+  Convert_YUVtoRGB(R,G,B,width,height,YS,UF,VF);
+  GetADC(frame_stf,B,G,R,width,height);
+
+  Convert_YUVtoRGB(R,G,B,width,height,YS,UM,VM);
+  GetADC(frame_outY,R,G,B,width,height);  
+  PutMotionVectorsInFrame(frame_outY,D,width,height);  
+  if(GENERATE_OUTPUT){
+    seq_outST.WriteFrame(i,frame_stf); 
+    seq_mv.WriteFrame(i,frame_outY); 
+  }
+  pframe=cvCloneImage(nframe);
+  // TR TODO Copy tFrame frame_stf to Mat dst
+  WriteFrameToMat(frame_stf,&dst,width,height);
+}
+
+void Mcwf::term(){
+   delete [] LL; delete [] LH; delete [] HL; delete [] HH; delete [] LL2; delete [] LH2; delete [] HL2; delete [] HH2;
+   delete [] LLU; delete [] LHU; delete [] HLU; delete [] HHU; delete [] LL2U; delete [] LH2U; delete [] HL2U; delete [] HH2U;
+   delete [] LLV; delete [] LHV; delete [] HLV; delete [] HHV; delete [] LL2V; delete [] LH2V; delete [] HL2V; delete [] HH2V;
+
+   delete [] LLUF; delete [] LHUF; delete [] HLUF; delete [] HHUF;delete [] LLVF; delete [] LHVF; delete [] HLVF; delete [] HHVF;
+
+   delete [] LLUP; delete [] LHUP; delete [] HLUP; delete [] HHUP; delete [] LL2UP; delete [] LH2UP; delete [] HL2UP; delete [] HH2UP;
+   delete [] LLVP; delete [] LHVP; delete [] HLVP; delete [] HHVP; delete [] LL2VP; delete [] LH2VP; delete [] HL2VP; delete [] HH2VP;
+   delete [] LLO;delete [] LHO;delete [] HLO;delete [] HHO;delete [] LL2O;delete [] LH2O;delete [] HL2O;delete [] HH2O;
+   delete [] LLP;delete [] LHP;delete [] HLP;delete [] HHP;delete [] LLP2;delete [] LHP2;delete [] HLP2;delete [] HHP2;
+   delete [] UM; delete [] VM;
+   delete [] madU0; delete [] madV0; delete [] madV;delete [] madU;
+   delete [] mad0LL;delete [] mad0LH;delete [] mad0HL;delete [] mad0HH;delete [] madLL;delete [] madLH;delete [] madHL;delete [] madHH;
+
+   delete [] madLLs;delete [] madLHs;delete [] madHLs;delete [] madHHs;delete [] madLL2s;delete [] madLH2s;delete [] madHL2s;delete [] madHH2s;
+
+   delete [] madLL2;delete [] madLH2;delete [] madHL2;delete [] madHH2; delete [] mad0LL2;delete [] mad0LH2;delete [] mad0HL2;delete [] mad0HH2;
+
+   delete [] U; delete [] V;delete [] R;delete [] G; delete [] B;
+
+   delete [] UF; delete [] VF;
+  
+   /* TR START uitval nfree_video *
+   delete [] XO; delete [] XOP;  delete [] UFO; delete [] VFO;delete [] RO;delete [] GO; delete [] BO; /* TR END */
+
+   /* TR START *
+   delete [] UO; delete [] VO;delete [] RAM; delete [] ARAM; /* TR END */ delete [] X; delete [] XP;delete [] XC;delete [] YT; delete [] YS; delete [] D;
+
+   delete[] Lap_p; delete[] Lap_kurtosis; delete [] alphaI; delete [] alphaII;
+
+   /* TR START *
+   fclose(fp);fclose(fp1);fclose(fp2);fclose(fp3);fclose(fp4);fclose(fp5);fclose(fMSE);fclose(fSM);fclose(flum);fclose(fp_ram);/* TR END */
+}

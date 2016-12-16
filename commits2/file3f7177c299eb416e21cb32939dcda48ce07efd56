@@ -1,0 +1,6 @@
+Denoising options
+-----------------
+Normalized Box Filter (mean of neighbours, equal weights)
+Gaussian Blur (mean of neighbours, Gaussian function weighting)
+Median Blur (median of neighbours)
+(Adaptive) Bilateral Filter (..., good at perserving edges)

@@ -1,0 +1,9 @@
+#include<math.h>
+
+double SpatialSmoothing(double*,int,int,int,int,double);
+void RenderingCH(int,int,double*,double*,double*,double*,int,double*);
+void Rendering(int,int,double*,double*,double*,double*,double,double*);
+double SpatialSmoothingST(double*,int,int,int,int,double);
+double ChangThreshold(double*,int,int,double);
+void RenderingUV_spa(int w,int h,double* U,double* V,double,double);
+void Rendering_MADB(int,int,double*,double*,double*,double*,double*,double*,double*,double*,int,int,int,double);

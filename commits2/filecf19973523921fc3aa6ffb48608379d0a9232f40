@@ -1,0 +1,7 @@
+*.pdf
+FGBF_OPTFLOW/input/*
+*/output/*
+*/main
+ARPS/*
+Motion_Detection/*.jpg
+*/CMake*

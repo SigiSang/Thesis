@@ -1,0 +1,484 @@
+// expvision.cpp :	Glavna funkcija za testiranje klasa koje implementiraju
+//					detekciju pokretnih objekata
+//
+
+#include "cv.h"
+#include "highgui.h"
+#include "OpenCvAvi.h"
+#include <fstream>
+#include "stauffer.h"
+
+#define _NGROUND_TRUTH
+#define NDEBUG
+
+#ifndef NDEBUG
+#include <ctime>
+#endif
+
+#ifndef NDEBUG
+	clock_t start_c1, finish_c1;
+	double  duration=0;
+	double brojac=0;
+#endif
+
+
+using namespace std;
+
+void calc_tn(const IplImage* gt, const IplImage* fg, IplImage* out)
+{
+	// tn=not(fg or gt)
+	cvOr(gt,fg,out);
+	cvNot(out,out);
+}
+void calc_tp(const IplImage* gt, const IplImage* fg, IplImage* out)
+{
+	cvAnd(gt,fg,out);
+}
+void calc_fn(const IplImage* gt, const IplImage* fg, IplImage* out)
+{
+	// fn = gt and (not(fg)))
+	IplImage* tmp=(IplImage*)cvClone(fg);
+	cvNot(tmp,tmp);
+	cvAnd(tmp,gt,out);
+	cvReleaseImage(&tmp);
+}
+void calc_fp(const IplImage* gt, const IplImage* fg, IplImage* out)
+{
+	// fp= fg and (not(gt))
+	IplImage* tmp=(IplImage*)cvClone(gt);
+	cvNot(tmp,tmp);
+	cvAnd(tmp,fg,out);
+	cvReleaseImage(&tmp);
+}
+
+double calc_stats(const IplImage* gt, const IplImage* fg, void (*func)(const IplImage*,const IplImage*,IplImage*), IplImage* out=NULL)
+{
+	//fg - foreground image
+	//gt - ground truth image
+	int release=0;
+	if (out==NULL)
+	{
+		out=(IplImage*)cvClone(fg);
+		release=1;
+	}
+	IplConvKernel* m=cvCreateStructuringElementEx(5,5,2,2,CV_SHAPE_RECT);
+	IplImage* tmp_fg=(IplImage*)cvClone(fg);
+	IplImage* tmp=(IplImage*)cvClone(fg);
+
+	//oduzima greske u regionu od 2 pixela u okolini granice
+	//odnosno pravi da je u tom regionu odluka dobra
+	//izvan granice je crno
+	cvDilate(gt, tmp, m);
+	cvXor(gt, tmp, tmp);
+	cvNot(tmp,tmp);
+	cvAnd(tmp,fg,tmp_fg);
+
+	//unutar granice je belo
+	cvErode(gt, tmp, m);
+	cvXor(gt, tmp, tmp);
+	cvOr(tmp,tmp_fg,tmp_fg);
+
+	(*func)(gt,tmp_fg,out);
+
+	double out_count = double(cvCountNonZero(out));
+	if (release==1)
+	{
+		cvReleaseImage(&out);
+	}
+	cvReleaseImage(&tmp_fg);
+	cvReleaseImage(&tmp);
+	
+	return out_count;
+}
+double calc_sensitivity(const IplImage* gt, const IplImage* fg)
+{
+	//isto sto i recall
+	double tp = calc_stats(gt, fg, &calc_tp);
+	double fn = calc_stats(gt, fg, &calc_fn);
+	if ((tp+fn)==0)
+		return 1;
+	else
+		return (tp/(tp+fn));
+}
+
+double calc_specificity(const IplImage* gt, const IplImage* fg)
+{
+	double tn = calc_stats(gt, fg, &calc_tn);
+	double fp = calc_stats(gt, fg, &calc_fp);
+	if ((tn+fp)==0)
+		return 1;
+	else
+		return (tn/(tn+fp));
+}
+
+double calc_precision(const IplImage* gt, const IplImage* fg)
+{
+	double tp = calc_stats(gt, fg, &calc_tp);
+	double fp = calc_stats(gt, fg, &calc_fp);
+
+	if ((tp+fp)==0)
+		return 1;
+	else
+		return (tp/(tp+fp));
+}
+
+double calc_acc(const IplImage* gt, const IplImage* fg)
+{
+	return ((calc_specificity(gt,fg)+calc_sensitivity(gt,fg))/2);
+}
+
+void Testing(int pos);
+void Initialize(void);
+
+// CMotionSegmentation* m_pMotionSegmentation;
+CMultimodalPixelModel* m_pMultimodalPixelModel;
+
+// Globalna promenljiva koja cuva vrednost klizaca 
+int bckthold = 5;
+
+/*
+// callback funkcija koja se poziva kada se promeni polozaj klizaca   
+void Testing(int pos)   
+{
+	m_pMotionSegmentation->setBackgroundThreshold(3.5 + (pos - 5)/5.0);
+
+}  
+*/
+
+// funkcija koja konstruise objekte klasa koje implementiraju izdvajanje pokretnih objekata 
+void Initialize(CvSize imSize)
+{
+	// m_pMotionSegmentation je objekat klase CMotionSegmentation koja odgovara nasem algoritmu za segmentaciju
+	// m_pMotionSegmentation = new CMotionSegmentation(imSize.width, imSize.height, 100, 2.0, 9, 10, 180, 3.5, 0.01, 1.5, 0, 0);
+	
+	// m_pMultimodalPixelModel je objekat klase CMultimodalPixelModel koja odgovara Stauffer-Grimson
+	// algoritmu za segmentaciju
+	//m_pMultimodalPixelModel = new CMultimodalPixelModel(imSize.width, imSize.height, 3, 255, 0.01, 0.5);
+	m_pMultimodalPixelModel = new CMultimodalPixelModel(imSize.width, imSize.height, 5, 255, 0.01, 0.7);
+}
+
+int main(int argc, char* argv[])
+{
+	////////////////////
+	//frame number
+	CvFont font;
+	cvInitFont( &font, CV_FONT_HERSHEY_PLAIN,3.0, 3.0, 0, 3, CV_AA);
+	CvPoint pt = cvPoint(10,50);
+	IplImage*  broj = cvCreateImage(cvSize(130,70),IPL_DEPTH_8U,3);
+	cvSetZero(broj);
+	cvNamedWindow("broj", 1);
+	char buffer[200];
+	char im_name[200];
+	
+	///////////////////////////
+	//input dir
+	char dir[200];
+	//sprintf(dir,"/net/gromit/t/users/nemanja/avi");
+	//sprintf(dir,"/net/floyd/t/users/nemanja/takmicenje");
+	sprintf(dir,"/net/floyd/t/users/nemanja");
+
+	char dir2[200];
+	sprintf(dir2,"/net/floyd/t/users/nemanja/rezultati/bgfg/tmp");
+	char in_fname[200];
+	//sprintf(in_fname,"%s/x_indoor1.avi",dir);
+	//sprintf(in_fname,"%s/x_indoor2.avi",dir);
+	//sprintf(in_fname,"%s/x_hall.avi",dir);
+
+	sprintf(in_fname,"%s/takmicenje/x_video7.avi",dir);
+	//sprintf(in_fname,"%s/takmicenje/x_video8.avi",dir);
+	//sprintf(in_fname,"%s/takmicenje/x_video6.avi",dir);
+	//sprintf(in_fname,"%s/takmicenje/x_video4.avi",dir);
+
+	
+	//sprintf(in_fname,"%s/x_krNorm.avi",dir);
+	//sprintf(in_fname,"%s/kr/x_krSnow.avi",dir);
+	//sprintf(in_fname,"%s/kr/x_krNibelP.avi",dir);
+	//sprintf(in_fname,"%s/kr/x_krRhein.avi",dir);
+
+	//char out_fname[200];
+	//sprintf(out_fname,"%s/gmm_antic_krNorm.avi",dir2);
+#ifndef _NGROUND_TRUTH
+	char gt_fname[200];
+	//sprintf(gt_fname,"%s/takmicenje/x_video6_gt.avi",dir);
+	//sprintf(gt_fname,"%s/takmicenje/x_video8_gt.avi",dir);
+	sprintf(gt_fname,"%s/takmicenje/x_video7_gt.avi",dir);
+	
+	OpenCvAVI gt_seq(gt_fname);
+
+	//rezultat u fajl
+	char rez_fname[200];
+
+	//sprintf(rez_fname,"%s/rezGMM_v8_fpfn.txt",dir2);
+	sprintf(rez_fname,"%s/rezGMM_v7_alfa001_07.txt",dir2);
+	
+	//sprintf(rez_fname,"%s/rezGMM_v8.txt",dir2);
+	//sprintf(rez_fname,"%s/rezGMM_v6.txt",dir2);
+	ofstream ofs;
+	ofs.open(rez_fname, ios::out);
+
+	IplImage* gt=NULL;
+	IplImage* fp=NULL;
+	IplImage* fn=NULL;
+	IplImage* tp=NULL;
+	IplImage* tn=NULL;
+	
+#endif
+
+	////////////////////////////////////////////////////////
+	//main
+	
+	OpenCvAVI seq(in_fname);
+
+	/////////////////////////////////
+	int nRetCode = 0;
+	int m_lSampleCounter = 0;
+
+
+	//CvCapture* capture = 0;
+	/*
+	if( argc == 1 || (argc == 2 && _tcslen(argv[1]) == 1 && isdigit(argv[1][0])))
+		// grebovanje frejmova ide direktno sa kamere, ako nije prosledjen nijedan
+		// parametar sa komandne linije
+		capture = cvCaptureFromCAM( argc == 2 ? argv[1][0] - '0' : 0 );
+	else if( argc == 2 )
+		// grebovanje frejmova ide iz fajla, cije ime je prosledjeno kao parametar
+		// preko komandne linije
+		capture = cvCaptureFromAVI(argv[1]);
+
+	// ako grebovanje nije uspelo
+	if( !capture )
+	{
+		fprintf(stderr,"Could not initialize capturing...\n");
+		return -1;
+	}
+	*/
+		
+	// generisu se tri izlazna prozora
+	cvNamedWindow( "Input", 0 );
+	cvNamedWindow( "Foreground", 0);
+	//cvNamedWindow( "Background", 0);
+
+	CvSize imSize;
+		
+	// imForeground,... su promenljive u kojima se cuva trenutni frejm nakon grebovanja
+	IplImage* imForeground = 0;
+	IplImage* imForegroundFiltered = 0;
+	IplImage* imForegroundColor = 0;
+	IplImage* imForeground3Channel = 0;
+	IplImage* imBackground = 0;
+	IplImage* imInputGray = 0;
+	IplImage* imJointView = 0;
+
+	// m_pmatTmp1_8UC1  je pomocna struktura za morfolosko filtriranje
+	CvMat* m_pmatTmp1_8UC1 = 0;
+		
+	CvVideoWriter* writer = 0;
+
+		
+	// petlja u kojoj se vrsi obrada frejmova iz ulaznog toka
+	int cfr = 7;
+	int start_fr=cfr; //for out_seq
+	int nframes=seq.GetNFR();
+	//out
+	//OpenCvAVI out_seq(out_fname,seq.GetNFR()-start_fr,25,seq.GetW(),seq.GetH());
+	
+	int time=0;
+		
+	while((cfr<nframes)&&(cfr>=0)){
+		
+		IplImage* imInput = 0;
+
+		// grebovanje frejma iz izvora capture
+		//imInput = cvQueryFrame( capture );
+		imInput = seq.GetFr(cfr);
+
+		// ukoliko je kraj toka, ili neki drugi problem, petlja se prekida
+		if( !imInput )
+			break;
+			
+		// odredjuje dimenzije frejma
+		imSize = cvGetSize(imInput);
+
+		// ukoliko je ovo prvi frejm ili ukoliko su dimenzije novog frejma drugacije od prethodnih
+		// konstruisu se nove strukture za cuvanje frejma, pozadine i prednjeg plana
+		if(!imForeground || imForeground->height != imSize.height || imForeground->width != imSize.width)
+		{
+			Initialize(imSize);
+			imForeground = cvCreateImage(imSize, 8, 1);
+			imForegroundFiltered = cvCreateImage(imSize, 8, 1);
+			imForegroundColor = cvCreateImage(imSize, 8, 3);
+			imBackground = cvCreateImage(imSize, 8, 1);
+			imInputGray = cvCreateImage(imSize, 8, 1);
+			m_pmatTmp1_8UC1 = cvCreateMat(imSize.height, imSize.width, CV_8UC1);
+			imJointView = cvCreateImage(cvSize(2 * imSize.width,imSize.height) , 8, 3);
+	//writer=cvCreateVideoWriter("demo.avi",-1,15,cvSize(2*imSize.width,imSize.height));
+		}
+	
+		// m_lSampleCounter je brojac frejmova, koji se inkrementira svakim novim frejmom
+		++m_lSampleCounter;
+		
+		// prikaz izvornog frejma u koloru
+		 cvShowImage( "Input", imInput);
+			
+		//cvSetImageROI(imJointView, cvRect(0,0,imSize.width, imSize.height));
+		//cvCopy(imInput, imJointView);
+		//cvResetImageROI(imJointView);
+
+
+		// cvCreateTrackbar("Threshold","Input",&bckthold,10,Testing);
+		
+		// konverzija izvornog frejma iz kolor oblika u crno-beli oblik
+		cvCvtColor(imInput, imInputGray, CV_RGB2GRAY);
+			
+		// poziv metode za obradu crno-belog izvornog frejma na bazi naseg algoritma
+		// m_pMotionSegmentation->updateState(m_lSampleCounter, imInputGray, imBackground, imForeground);
+#ifndef NDEBUG
+		start_c1 = clock();
+		brojac++;
+#endif
+
+		// poziv metode za obradu crno-belog izvornog frejma na bazi Stauffer-Grimsonovog algoritma
+		m_pMultimodalPixelModel->frameSegmentation(imInputGray, imForeground);
+
+// podesavanje koordinatnog pocetka za sliku pozadine i prednjeg plana
+		imBackground->origin = imInput->origin;
+		imForeground->origin = imInput->origin;
+		imForegroundColor->origin = imInput->origin;
+		imJointView->origin = imInput->origin;		
+
+		// m_pstrelMorphology  je kernel dimenzija 3x3 za morfolosko filtriranje
+		IplConvKernel *m_pstrelMorphology = cvCreateStructuringElementEx(3,3,1,1, CV_SHAPE_RECT,0);
+//		IplConvKernel *m_pstrelMorphology = cvCreateStructuringElementEx(5,5,2,2,CV_SHAPE_ELLIPSE);
+
+		//AKO SE NE URADI FILTRIRANJE SA cvSmooth rezultat je ocajan
+		
+		// slika prednjeg plana se morfoloski filtrira MEDIAN operacijom, pri cemu je velicina prozora 7x7
+		// nakon morfoloskog filtriranja se zadrzavaju samo promene 0->1 (slika prednjeg plana je BW slika)
+		// primenjuje se jos jedna morfoloska operacija na slici prednjeg plana. Ovog puta je to OPEN operacija
+
+		cvSmooth(imForeground,imForegroundFiltered,CV_MEDIAN,7);
+		cvOr(imForeground,imForegroundFiltered,imForeground);
+		cvMorphologyEx( imForeground, imForeground, m_pmatTmp1_8UC1,m_pstrelMorphology, CV_MOP_OPEN, 1);
+		
+		cvConvertScale(imForeground,imForeground,255,0);
+		
+//		cvMorphologyEx( imForeground, imForeground, 0,m_pstrelMorphology, CV_MOP_CLOSE, 1);
+//		cvMorphologyEx( imForeground, imForeground, 0,m_pstrelMorphology, CV_MOP_OPEN, 1);
+
+
+#ifndef NDEBUG
+		finish_c1 = clock();
+		duration += (double)(finish_c1 - start_c1) / CLOCKS_PER_SEC;
+		cout<<"srednja brzina = "<<brojac/duration<<" fr/s"<<endl;
+#endif	
+
+#ifndef _NGROUND_TRUTH
+	gt = gt_seq.GetFrGray(cfr);
+	cvThreshold(gt,gt,128,255,CV_THRESH_BINARY);
+	cout<<"acc= "<<calc_acc(gt,imForeground)<<"   cfr="<<cfr<<endl;
+	ofs<<cfr<<" "<<calc_acc(gt,imForeground)<<" "<<calc_sensitivity(gt,imForeground)<<" "<<calc_precision(gt,imForeground)<<" "<<calc_specificity(gt,imForeground)<<endl;
+
+	//ofs<<cfr<<" "<<calc_stats(gt, imForeground, &calc_fp)<<" "<<calc_stats(gt, imForeground, &calc_fn)<<endl;
+	/*
+	if (fp==NULL){fp= (IplImage*)cvClone(in);}
+	if (fn==NULL){fn= (IplImage*)cvClone(in);}
+	if (tn==NULL){tn= (IplImage*)cvClone(in);}
+	if (tp==NULL){tp= (IplImage*)cvClone(in);}
+
+	cvNamedWindow("gt", 0);
+	cvNamedWindow("false_pos",0);
+	cvNamedWindow("false_neg",0);
+	cvNamedWindow("true_pos",0);
+	cvNamedWindow("true_neg",0);
+
+	double brojfp=calc_stats(gt, bg.fgmask, &calc_fp,fp);
+	double brojfn=calc_stats(gt, bg.fgmask, &calc_fn,fn);
+	double brojtp=calc_stats(gt, bg.fgmask, &calc_tp,tp);
+	double brojtn=calc_stats(gt, bg.fgmask, &calc_tn,tn);
+	cout<<"fp= "<<brojfp<<endl;
+	cout<<"fn= "<<brojfn<<endl;
+	cout<<"tp= "<<brojtp<<endl;
+	cout<<"tn= "<<brojtn<<endl;
+	cout<<"zbir= "<<brojfp+brojfn+brojtp+brojtn<<endl;
+	cvShowImage("true_neg", tn);
+	cvShowImage("true_pos", tp);
+	cvShowImage("false_neg", fn);
+	cvShowImage("false_pos", fp);
+	cvShowImage("gt", gt);
+	*/
+#endif
+
+// slika prednjeg plana prozorira izvornu crno-belu sliku da bi se dobili pokretni objekti
+		//cvMul(imInputGray,imForeground,imForeground);
+		//cvCopy(imInput, imForegroundColor);
+		//cvSet(imForegroundColor,cvScalar(255,255,0),imForeground);
+	//	cvConvertScale(imForeground,imForeground,255,0);
+	//	cvCvtColor(imForeground, imForegroundColor, CV_GRAY2RGB);
+		
+
+		
+	//	cvSetImageROI(imJointView, cvRect(imSize.width,0,imSize.width, imSize.height));
+
+	//	cvCopy(imForegroundColor, imJointView);
+	//	cvResetImageROI(imJointView);
+			
+
+		/////////////////////////
+		//broj
+		cvSetZero(broj);
+		sprintf(buffer,"%d",cfr);
+		cvPutText(broj, buffer, pt, &font, CV_RGB(128, 120, 0) );
+		cvShowImage("broj", broj);
+		
+		// prikaz slike sa izdvojenim pokretnim objektima
+	//	cvShowImage("Foreground", imJointView );
+		/////////////////////////////
+		//out
+		//out_seq.PutFr(imForegroundColor,cfr-start_fr);
+		//cvWriteFrame( writer, imJointView  );
+
+		// prikaz slike pozadine
+		cvShowImage("Foreground", imForeground );
+
+		// ako se unese karakter ESC program prekida sa radom
+
+		int key;
+		key=cvWaitKey(time);
+		if(key==27) break;
+		switch(key){
+			case ' ':{
+				if (time==3)
+					time=0;
+				cfr++;
+				break;
+			}
+			case 's': time=0;cfr++; break;
+			case 'c': time=3;cfr++; break;
+			//case 'z': cvSaveImage(im_name, d3);cfr++;break;
+			//case 'b': cfr--; break;
+			default : cfr++;
+		}
+		/* Don't run past the front/end of the AVI. */
+		if (cfr < 0) cfr = 0;
+		if (cfr >= nframes - 1){
+			cfr = nframes-1;
+			break;
+		}	
+	}
+
+	//cvWaitKey(0); // very important, contains event processing loop inside
+
+	// oslobadja se memorija
+	//cvReleaseCapture( &capture );
+	
+	//cvDestroyWindow("Input");
+	//cvDestroyWindow("Foreground");
+	//cvDestroyWindow("Background");
+
+	// delete m_pMotionSegmentation;
+	delete m_pMultimodalPixelModel;
+	cvReleaseMat(&m_pmatTmp1_8UC1);
+	//cvReleaseVideoWriter( &writer);
+
+	return 0;
+}

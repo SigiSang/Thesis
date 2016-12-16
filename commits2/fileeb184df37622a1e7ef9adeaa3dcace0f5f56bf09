@@ -1,0 +1,7 @@
+dir=$1
+n=1
+for i in $1*.jpg; do
+	new=$(printf "%06d.jpg" "$n")
+	mv -- $i $1$new
+	let n=n+1
+done

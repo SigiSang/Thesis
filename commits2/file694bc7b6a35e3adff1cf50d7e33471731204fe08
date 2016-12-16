@@ -1,0 +1,50 @@
+#ifndef _LBPModel_H_
+#define _LBPModel_H_
+
+#include "stdafx.h"
+
+#define MYCV_MAT_ELEM( mat, elemtype, row, col )  \
+	(((elemtype*)((mat)->data.ptr + (mat)->step*(row)))[(col)])
+
+class LBPModel
+{
+	public:
+		//LBPModel(int w, int h, double a_bg, double a_ch_detect, double trL, double trH);
+		LBPModel(int w, int h);
+		CvSize imSize;
+		~LBPModel();
+
+		void filter_small_regions(IplImage *img, IplConvKernel* element, int perform_morph, int minArea, int minWholeArea ,int bez_rupa);
+		void filter_small_regions_closeHoles(IplImage *img, IplConvKernel* element, int perform_morph, int minArea);
+		
+		void update(IplImage* in);
+
+		void preprocess (IplImage* in);
+		void temp_filt (IplImage* in);
+
+		
+		IplImage* bgLBP;
+		IplImage* inLBP;
+
+		IplImage* fgmaskOut;
+
+		IplImage* tmp_8u;
+		IplImage* tmp_32f;
+		
+		int called;
+		IplConvKernel* morph;	
+		IplConvKernel* morph2;
+
+		IplImage* prevFrLBP1;
+		IplImage* prevFrLBP2;
+
+		int brojac;
+
+		CvMat* LBPLUT;
+		void fillLBPLUT(void);
+		float calc_bilinear(float a, float b, float c, float d);
+		void calc_LBP(IplImage* im, IplImage* fIm);
+		void writeFrame(IplImage* frame, CvRect & box);
+
+};
+#endif //_BLBPModel_H_

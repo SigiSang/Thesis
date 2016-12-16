@@ -1,0 +1,44 @@
+
+#include "stdafx.h"
+#include <vector>
+#include "cxtypes.h"
+
+using namespace std;
+
+class CMultimodalPixelModel
+	{
+	public:
+
+		CMultimodalPixelModel(int nProcWidth, int nProcHeight,int nK, double dbRange, double dbAlpha, double dbT);
+		~CMultimodalPixelModel() {}
+		double setAlpha(double dbAlpha);
+		inline double getAlpha() const { return m_dbAlpha;}
+		double setT(double dbT);
+		inline double getT() const { return m_dbT;}
+		void frameSegmentation(IplImage *imgInputFrame_32SC1, IplImage *imgForeground_8UC1);
+	protected:
+		struct NormalDistribution
+		{
+			double wk;						// weight of particular Gaussian distribution 
+											// in multimodal model of pixel histogram
+			double uk;						// mean value of Gaussian distribution
+			double vark;					// variance of Gaussian distribution
+			double backgroundLikelihood;	// it is wk^2/vark value
+		};
+
+		int m_nProcWidth;
+		int m_nProcHeight;
+	
+		int m_nK;// K is the number of different Gaussian distributions in multimodal histogram model
+
+		double m_dbRange;  // range of input pixel values is (0..m_dbRange)
+		typedef vector<NormalDistribution> _TNormalDistributions;
+		vector<_TNormalDistributions> m_frameModel;
+
+		double m_dbAlpha;  // learning rate of multimodal parameter model
+		
+		double m_dbT;      // minimum cumulative weight of first B Gausian distributions that are background representatives
+		
+		bool classifyPixel(_TNormalDistributions &normalDistributions,double pixelValue);
+
+	};

@@ -1,0 +1,7 @@
+*.pdf
+*/main
+ARPS/*
+*.jpg
+*.zip
+*.png
+*/CMake*

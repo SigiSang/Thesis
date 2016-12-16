@@ -1,0 +1,143 @@
+#include "sf.h"
+#include<iostream>
+
+double SpatialSmoothing(double* LL,int m, int n,int w,int h,double thrd){
+
+   int q = n*w + m;
+   double res = 0.;
+   double counter = 0.;
+
+   for(int j=-1;j<2;j++)
+     for(int i=-1;i<2;i++){
+
+       if(fabs(LL[q]-LL[m+i+(n+j)*w])<= thrd) { res += LL[m+i+(n+j)*w]; counter +=1.;}
+        
+   }
+    res /= counter;
+
+       return res;
+
+}
+
+void RenderingUV_spa(int w,int h,double* U,double* V,double sigmaU,double sigmaV){
+
+  int BS = 8;
+  int q,s;
+  double thrdU = 4.*sigmaU;
+  double thrdV = 4.*sigmaV;
+
+       	for (int n=0;n<h;n++)
+	  for (int m=0;m<w;m++){
+
+	                q = n*w + m;  // each pixel  
+
+			if((n==0)||(n==(h-1))||(m==0)||(m==(w-1))){ U[q] = U[q]; U[q] = U[q]; }
+                        else{
+                                U[q] = SpatialSmoothing(U,m,n,w,h,thrdU);
+                                V[q] = SpatialSmoothing(V,m,n,w,h,thrdV);
+			}
+		}
+
+}
+
+void Rendering(int w,int h,double* LL,double* LH,double* HL,double* HH,double RAMAD,double* RAM){
+
+  int BS = 8;
+  int q,s;
+  double thrd;
+  int NX = w/BS;
+
+       	for (int n=0;n<h;n++)
+	  for (int m=0;m<w;m++) {
+
+	                q = n*w + m;  // each pixel  
+                        s = NX*(n/BS)+(m/BS);   // the number of the block motion
+ 
+			      thrd = RAM[s]/2.;
+
+                                LH[q] = SpatialSmoothing(LH,m,n,w,h,thrd);
+                                HL[q] = SpatialSmoothing(HL,m,n,w,h,thrd);
+				HH[q] = SpatialSmoothing(HH,m,n,w,h,thrd);
+		}
+
+}
+
+void RenderingCH(int w,int h,double* LL,double* LH,double* HL,double* HH,int RAMAD,double* alpha){
+
+  int q;
+  double thrdlh = ChangThreshold(LH,w,h,RAMAD);
+  double thrdhl = ChangThreshold(HL,w,h,RAMAD); 
+  double thrdhh = ChangThreshold(HH,w,h,RAMAD);
+
+       	for (int n=0;n<h;n++)
+	  for (int m=0;m<w;m++){
+                                 q = n*w + m;  
+
+                                LH[q] = SpatialSmoothingST(LH,m,n,w,h,thrdlh);
+                                HL[q] = SpatialSmoothingST(HL,m,n,w,h,thrdhl);
+		HH[q] = SpatialSmoothingST(HH,m,n,w,h,thrdhh);
+		}
+
+}
+
+void Rendering_MADB(int w,int h,double* LH,double* HL,double* HH,double *madLH,double *madHL,double *madHH,double *madU,double *madV,int NX,int BS,int scale,double sigma){
+
+  int q,s;
+
+       	for (int n=0;n<h;n++)
+	  for (int m=0;m<w;m++){
+                                   
+                               q = n*w + m;  s = NX*(n/BS)+(m/BS);   // the number of the block motion
+			       if((n==0)||(n==(h-1))||(m==0)||(m==(w-1))){}
+                               else{
+				 LH[q] = SpatialSmoothing(LH,m,n,w,h,(madLH[s]));
+				 HL[q] = SpatialSmoothing(HL,m,n,w,h,(madHL[s]));
+				 HH[q] = SpatialSmoothing(HH,m,n,w,h,(madHH[s]));
+			       }
+	  }
+
+}
+
+double SpatialSmoothingST(double* LL,int m, int n,int w,int h,double Threshold){
+
+   int q = n*w + m;
+   double res;
+
+   if(fabs(LL[q])>Threshold){ // keep the same sign
+
+                               if(LL[q]<0) res = -1*fabs(LL[q]-Threshold);
+                               else res = fabs(LL[q]-Threshold);
+   } 
+     else res = 0.;
+
+  return res;
+
+}
+
+double ChangThreshold(double* LL, int w, int h, double RAMAD){
+
+   int q,k;
+   double Threshold;
+   double sigmasq = RAMAD*RAMAD;
+   double mi = 0.;
+   double stdn2 = 0.;
+ 
+   /********standard deviation of signal *********/
+
+   for(k=0;k<(w*h);k++) mi += LL[k];
+   mi /= (w*h);
+    
+     for(q=0;q<(w*h);q++)  stdn2 += (LL[q]-mi)*(LL[q]-mi);
+     stdn2 /= (w*h);
+
+       //cout<<stdn2<<endl;
+
+      //This is  equal to sigma^2/sigma_x, because sigma_x = sqrt(2)/lambda
+
+     if(stdn2>sigmasq) Threshold = sigmasq/sqrt(stdn2-sigmasq);
+     else Threshold = 10000000000000.;
+
+     //cout<<"THR = "<<Threshold<<endl;
+
+     return Threshold;         
+}

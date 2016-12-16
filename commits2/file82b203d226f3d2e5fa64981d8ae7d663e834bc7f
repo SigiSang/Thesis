@@ -1,0 +1,419 @@
+// acm2003.cpp : Defines the entry point for the console application.
+//
+// runAvg.cpp : Defines the entry point for the console application.
+//
+
+#include "stdafx.h"
+
+//#define SNIMAJ
+#define NTIME
+#define _NGROUND_TRUTH
+
+#ifndef NTIME
+#include <ctime>
+#endif
+
+#ifndef NTIME
+	clock_t start_c1, finish_c1;
+	double  duration=0;
+	double brojac=0;
+#endif
+
+using namespace std;
+
+////////////////////////
+//MAIN
+////////////////////////////////
+int _tmain(int argc, _TCHAR* argv[])
+{
+	////////////////////
+	//frame number
+	CvFont font;
+	cvInitFont( &font, CV_FONT_HERSHEY_PLAIN,3.0, 3.0, 0, 3, CV_AA);
+	CvPoint pt = cvPoint(10,50);
+	IplImage*  broj = cvCreateImage(cvSize(130,70),IPL_DEPTH_8U,3);
+	cvSetZero(broj);
+	cvNamedWindow("broj", 1);
+	char buffer[200];
+	char im_name[200];
+
+
+	IplImage* in=NULL;
+	IplImage* capturedFrame=NULL;
+	IplImage* imColor=0;
+	IplImage* imFg=0;
+	IplImage* imJoint=0;
+	IplImage* imJoint2=0;
+
+#ifndef _NGROUND_TRUTH
+	IplImage* gt=NULL;
+#endif
+	CvVideoWriter* writer = 0;
+
+#ifndef _NGROUND_TRUTH
+	char gt_fname[200];
+	//sprintf(gt_fname,"%s/takmicenje/x_video6_gt.avi",dir);
+	sprintf(gt_fname,"%s/takmicenje/video7_groundTruth_long.avi",dir);
+
+	//OpenCvAVI gt_seq(gt_fname);
+
+	CvCapture *gt_seq = cvCaptureFromFile(gt_fname);
+	if (gt_seq==NULL){
+		cout<<"Error: Can't open video.\n"<<endl;
+		return -1;
+	}
+	cvQueryFrame(gt_seq);
+	
+	//rezultat u fajl
+	char rez_fname[200];
+	//sprintf(rez_fname,"%s/rezRunAvg_v8_fpfn3.txt",dir2);
+	sprintf(rez_fname,"%s/rezRunAvg_v7_acc_noExtCD.txt",dir2);
+	
+	//sprintf(rez_fname,"%s/rezRunAvg_v8.txt",dir2);
+	//sprintf(rez_fname,"%s/rezRunAvg_v6.txt",dir2);
+	ofstream ofs;
+	ofs.open(rez_fname, ios::out);
+	
+	//IplImage* gt=NULL;
+	IplImage* gt_tmp=NULL;
+	
+	IplImage* fp=NULL;
+	IplImage* fn=NULL;
+	IplImage* tp=NULL;
+	IplImage* tn=NULL;
+	
+#endif
+
+////////////////////////////////////////////////////////
+//main
+
+
+	//IplImage* prev=NULL;
+	//IplImage* diff=NULL;
+	IplConvKernel* morph2;
+	morph2=cvCreateStructuringElementEx(3,3,1,1,CV_SHAPE_ELLIPSE);
+	
+	//OpenCvAVI seq(in_fname);
+	CvCapture *seq = cvCaptureFromFile(argv[1]);
+	//CvCapture *seq = cvCaptureFromFile(in_fname);
+	if (seq==NULL){
+		cout<<"Error: Can't open video.\n"<<endl;
+		return -1;
+	}
+	//cvQueryFrame(seq);
+	CvSize imSize;
+	imSize.height =(int)cvGetCaptureProperty(seq,CV_CAP_PROP_FRAME_HEIGHT);
+	imSize.width =	(int)cvGetCaptureProperty(seq,CV_CAP_PROP_FRAME_WIDTH);
+	cout<<"sirina = "<<imSize.width<<"   visina = "<<imSize.height<<endl;
+	int nframes = (int)cvGetCaptureProperty(seq,CV_CAP_PROP_FRAME_COUNT);
+	cout<<"broj frejemova = "<<nframes<<endl;
+
+	int cfr;
+	int brojac=-1;
+	int time=3;
+	int start_fr=8; 
+
+
+	CvBGStatModel* bg_model;
+		 //create BG model
+	 /* default parameters of gaussian background detection algorithm 
+CV_BGFG_MOG_BACKGROUND_THRESHOLD     0.7      threshold sum of weights for
+															background test 
+CV_BGFG_MOG_STD_THRESHOLD            2.5      lambda=2.5 is 99%
+CV_BGFG_MOG_WINDOW_SIZE              200      Learning rate; alpha =
+																		1/CV_GBG_WINDOW_SIZE 
+CV_BGFG_MOG_NGAUSSIANS               5        = K = number of Gaussians in
+																		mixture 
+CV_BGFG_MOG_WEIGHT_INIT              0.05
+CV_BGFG_MOG_SIGMA_INIT               30
+CV_BGFG_MOG_MINAREA                  15.f
+CV_BGFG_MOG_NCOLORS                  3
+	 */
+	 CvGaussBGStatModelParams params;
+	params.bg_threshold = 0.7;
+	params.std_threshold = 2.5;
+	params.win_size = 200;
+	params.n_gauss = 5;
+	params.weight_init = 0.05;
+	params.variance_init = 30*30; //CV_BGFG_MOG_SIGMA_INIT^2
+	params.minArea = 15.f;
+
+
+
+////////////////////////
+/*
+Interface of ACM MM2003 algorithm
+(Liyuan Li, Weimin Huang, Irene Y.H. Gu, and Qi Tian.
+"Foreground Object Detection from Videos Containing Complex Background. ACM MM2003")
+
+	default paremeters of foreground detection algorithm
+CV_BGFG_FGD_LC              128
+CV_BGFG_FGD_N1C             15
+CV_BGFG_FGD_N2C             25
+CV_BGFG_FGD_LCC             64
+CV_BGFG_FGD_N1CC            25
+CV_BGFG_FGD_N2CC            40
+
+	BG reference image update parameter 
+CV_BGFG_FGD_ALPHA_1         0.1f
+
+stat model update parameter
+   0.002f ~ 1K frame(~45sec), 0.005 ~ 18sec (if 25fps and absolutely static BG)
+	0.09 ~1s  moja procena
+	0.45 ~0.2s moja procena
+CV_BGFG_FGD_ALPHA_2         0.005f
+
+start value for alpha parameter (to fast initiate statistic model)
+CV_BGFG_FGD_ALPHA_3         0.1f
+CV_BGFG_FGD_DELTA           2
+CV_BGFG_FGD_T               0.9f
+CV_BGFG_FGD_MINAREA         15.f
+CV_BGFG_FGD_BG_UPDATE_TRESH 0.5f
+*/
+	CvFGDStatModelParams params2;
+
+
+	params2.Lc = 128;
+	params2.N1c = 15;
+	params2.N2c = 25;
+	params2.Lcc = 64;
+	params2.N1cc = 25;
+	params2.N2cc = 40;
+
+	params2.alpha1 = 0.1f;
+	params2.alpha2 = 0.01f;
+	
+	params2.alpha3 = 0.1f;
+	params2.delta = 2;
+	params2.T = 0.9f;
+	params2.minArea = 15.f;
+	params2.is_obj_without_holes = 1;
+	params2.perform_morphing = 1;
+
+			
+	 
+
+			
+	
+	/////////////////////////////////////////
+	//out
+//	char out_fname[200];
+//	sprintf(out_fname,"%s/runavgOut.avi",dir2);
+//	OpenCvAVI out_seq(out_fname,1000,25,imSize.width,imSize.height);
+	
+	//cvNamedWindow("in", 1);
+	cvNamedWindow("fg", 1 );
+	//cvNamedWindow("cd", 1);
+	//cvNamedWindow("fgOut", 1);
+
+	cvSetCaptureProperty(seq,CV_CAP_PROP_POS_FRAMES, start_fr);
+
+	int wrframe=0;
+	while(true){
+		cfr = (int) cvGetCaptureProperty(seq,CV_CAP_PROP_POS_FRAMES);
+		(brojac<0) ? brojac=cfr : brojac++;
+		if (brojac!=cfr) cout<<"Preskocen frejm!!!"<<endl;
+		//std::cout<<"broj fr = "<<cfr<<std::endl;
+		capturedFrame=cvQueryFrame(seq);
+		
+		if (cfr<start_fr) continue;
+		if (capturedFrame==NULL){
+			nframes=cfr;
+			cout<<"kraj sekvence"<<endl;
+			break;
+		}
+		if(!in)
+		{
+			in=cvCreateImage(imSize,IPL_DEPTH_8U,1);
+			in->origin = capturedFrame->origin;
+			
+			imColor = cvCreateImage(imSize, 8, 3);
+			imColor->origin = capturedFrame->origin;
+			imJoint = cvCreateImage(cvSize(2 * imSize.width,imSize.height) , 8, 3);
+			imJoint->origin = capturedFrame->origin;
+			imJoint2 = cvCreateImage(cvSize(imSize.width,2*imSize.height) , 8, 3);
+			imJoint2->origin = capturedFrame->origin;
+
+			//bg_model = cvCreateGaussianBGModel( capturedFrame, &params );
+			bg_model = cvCreateFGDStatModel( capturedFrame, &params2);
+
+#ifndef _NGROUND_TRUTH
+			gt=cvCreateImage(imSize,IPL_DEPTH_8U,1);
+#endif
+#ifdef SNIMAJ
+			writer = cvCreateVideoWriter( "out.avi", -1, 25, imSize);
+			//writer = cvCreateVideoWriter( "out.avi", -1, 25, cvSize(imSize.width,2*imSize.height));
+#endif
+		}
+		//if (capturedFrame->nChannels==3){
+			//cvCvtColor(capturedFrame, in, CV_RGB2GRAY);
+		//	cvCvtColor(capturedFrame, in, CV_BGR2GRAY);
+		//}
+		//cvCopy(capturedFrame, imColor);
+		cvSetImageROI(imJoint, cvRect(0,0,imSize.width, imSize.height));
+		cvCopy(capturedFrame, imJoint);
+		cvResetImageROI(imJoint);
+		
+		cvSetImageROI(imJoint2, cvRect(0,0,imSize.width, imSize.height));
+		cvCopy(capturedFrame, imJoint2);
+		cvResetImageROI(imJoint2);
+		
+		cvCopy(capturedFrame, imColor);
+		//in = seq.GetFrGray(cfr);
+		//bg.update(in);
+
+#ifndef NTIME
+		start_c1 = clock();
+		brojac++;
+#endif
+	
+		cvUpdateBGStatModel( imColor, bg_model );
+
+#ifndef NTIME
+		finish_c1 = clock();
+		double dur1fr=(double)(finish_c1 - start_c1) / CLOCKS_PER_SEC;
+		duration += dur1fr;
+		if (cfr == nframes - 1){
+			cout<<"srednja brzina = "<<brojac/duration<<" fr/s"<<endl;
+			cout<<"brojac = "<<brojac<<endl;
+			cout<<"trajanje = "<<duration<<endl;
+	}
+#endif	
+
+		if (!imFg){			
+			imFg = cvCloneImage(bg_model->foreground);
+			imFg->origin = capturedFrame->origin;
+		}
+		else{
+			cvCopy(bg_model->foreground,imFg);
+		}
+		//cvMorphologyEx(imFg, imFg, 0,morph2,CV_MOP_OPEN,1);
+		
+		//cvCopy(bg.fgmaskOut, imFg);
+		cvSet( imColor, cvScalar(255,0,255), imFg);
+		cvSetImageROI(imJoint, cvRect(imSize.width,0,imSize.width, imSize.height));
+		cvCopy(imColor, imJoint);
+		cvResetImageROI(imJoint);
+		
+		cvSetImageROI(imJoint2, cvRect(0,imSize.height,imSize.width, imSize.height));
+		cvCopy(imColor, imJoint2);
+		cvResetImageROI(imJoint2);
+
+		//cvShowImage("in", in);
+		//cvShowImage("fgOut", bg.fgmaskOut);
+		//cvShowImage("cd", bg.cdmask);
+		//cvShowImage("fg", bg.fgmask);
+		cvShowImage("fg", imJoint2);
+
+	/*	if (prev==0){
+			prev=(IplImage*)cvClone(in);
+			diff=(IplImage*)cvClone(in);
+		}
+		else{
+			cvAbsDiff(in, prev,diff);
+			cvThreshold(diff,diff,trH,255,CV_THRESH_BINARY);
+
+			fsr2(diff,morph2,0,30);
+			//cvMorphologyEx(diff, diff, 0, 0, CV_MOP_OPEN, 1 );
+			//cvMorphologyEx(diff, diff, 0, 0, CV_MOP_CLOSE, 1 );
+			cvCopy(in, prev);
+		}
+		*/
+		
+#ifndef _NGROUND_TRUTH
+	//gt = gt_seq.GetFrGray(cfr);
+	gt_tmp=cvQueryFrame(gt_seq);
+	if (gt_tmp->nChannels==3)
+		cvCvtColor(gt_tmp, gt, CV_RGB2GRAY);
+	
+	cvThreshold(gt,gt,128,255,CV_THRESH_BINARY);
+	cout<<"acc= "<<calc_acc(gt,bg.fgmask)<<endl;
+	ofs<<cfr<<" "<<calc_acc(gt,bg.fgmask)<<" "<<calc_sensitivity(gt,bg.fgmask)<<" "<<calc_precision(gt,bg.fgmask)<<" "<<calc_specificity(gt,bg.fgmask)<<" "<<calc_stats(gt, bg.fgmask, &calc_tp,0)<<endl;
+
+	//ofs<<cfr<<" "<<calc_stats(gt, bg.fgmask, &calc_fp)<<" "<<calc_stats(gt, bg.fgmask, &calc_fn)<<endl;
+	/*
+	if (fp==NULL){fp= (IplImage*)cvClone(in);}
+	if (fn==NULL){fn= (IplImage*)cvClone(in);}
+	if (tn==NULL){tn= (IplImage*)cvClone(in);}
+	if (tp==NULL){tp= (IplImage*)cvClone(in);}
+
+	cvNamedWindow("gt", 0);
+	cvNamedWindow("false_pos",0);
+	cvNamedWindow("false_neg",0);
+	cvNamedWindow("true_pos",0);
+	cvNamedWindow("true_neg",0);
+
+	double brojfp=calc_stats(gt, bg.fgmask, &calc_fp,fp);
+	double brojfn=calc_stats(gt, bg.fgmask, &calc_fn,fn);
+	double brojtp=calc_stats(gt, bg.fgmask, &calc_tp,tp);
+	double brojtn=calc_stats(gt, bg.fgmask, &calc_tn,tn);
+	cout<<"fp= "<<brojfp<<endl;
+	cout<<"fn= "<<brojfn<<endl;
+	cout<<"tp= "<<brojtp<<endl;
+	cout<<"tn= "<<brojtn<<endl;
+	cout<<"zbir= "<<brojfp+brojfn+brojtp+brojtn<<endl;
+	cvShowImage("true_neg", tn);
+	cvShowImage("true_pos", tp);
+	cvShowImage("false_neg", fn);
+	cvShowImage("false_pos", fp);
+	cvShowImage("gt", gt);
+	*/
+#endif
+
+		/////////////////////////
+		//broj
+		cvSetZero(broj);
+		sprintf(buffer,"%d",cfr);
+		cvPutText(broj, buffer, pt, &font, CV_RGB(128, 120, 0) );
+		cvShowImage("broj", broj);
+
+#ifdef SNIMAJ
+		//cvWriteFrame(writer, bg.fgmask);
+		//cvWriteFrame(writer, imJoint2);
+		cvWriteFrame(writer, imColor);
+#endif
+		//IplImage* tmppm=cvCreateImage(imSize,IPL_DEPTH_8U,3);
+		//cvCvtColor(bg.fgmask,tmppm,CV_GRAY2RGB);
+		//sprintf(im_name,"%s/roomAvgFg_%d.tif",dir2,cfr);
+		//cvSaveImage(im_name, tmppm);
+		//cvReleaseImage(&tmppm);
+		
+		int key;
+		key=cvWaitKey(time);
+		if(key==27) break;
+		switch(key){
+			case ' ':{
+				if (time==3)
+					time=0;
+				break;
+			}
+			case 's': time=0; break;
+			case 'c': time=3; break;
+			//case 'z': {
+			//	sprintf(im_name,"imgCd_%d.jpg",cfr);
+			//	cvSaveImage(im_name, bg.cdmask);
+			//	sprintf(im_name,"imgFg_%d.jpg",cfr);
+			//	cvSaveImage(im_name, bg.fgmask);
+			//	sprintf(im_name,"imgFgOut_%d.jpg",cfr);
+			//	cvSaveImage(im_name, bg.fgmaskOut);
+			//	sprintf(im_name,"imgIn_%d.jpg",cfr);
+			//	cvSaveImage(im_name, capturedFrame);
+			//	//sprintf(im_name,"%s/imgCd2_%d.jpg",dir2,cfr);
+			//	//cvSaveImage(im_name, bg.cdmask);
+			//	break;
+			//		  }
+		}
+		}
+#ifndef NTIME
+		cout<<"srednja brzina = "<<brojac/duration<<" fr/s"<<endl;
+		cout<<"brojac = "<<brojac<<endl;
+		cout<<"trajanje = "<<duration<<endl;
+#endif
+	cvReleaseCapture(&seq);
+#ifdef SNIMAJ
+	cvReleaseVideoWriter( &writer);
+#endif
+	return 0;
+};
+
+

@@ -1,0 +1,372 @@
+#include "func.h"
+
+using namespace std;
+
+int compare (const void * a, const void * b)
+{
+	if ( (float*)a > (float*)b ) return 1;
+	if ( (float*)a ==(float*)b ) return 0;
+	if ( (float*)a < (float*)b ) return -1;
+	return 0;
+}
+// ovo sam ja probao da napravim isti automatski threshold algoritam iz rosin98
+// poglavlje 3 koji radi na principu procene gausovog suma
+// izgleda da algoritam lose radi
+void trEstim(IplImage* img, double* tr)
+{
+	int i,j;
+	CvHistogram* hist;
+	int size[]={256};
+	hist = cvCreateHist( 1, size, CV_HIST_ARRAY);
+	cvCalcHist(&img,hist);
+
+	float** mat=new float* [size[0]];
+	for (j=0; j<size[0];j++){
+		mat[j]=new float[size[0]];
+	}
+	for (j=0; j<size[0];j++){
+		for (i=0; i<size[0];i++){
+			mat[j][i]=(cvQueryHistValue_1D(hist,i)-j)*(cvQueryHistValue_1D(hist,i)-j);
+		}
+	}
+	float najmanji=100000000;
+	for (j=0; j<size[0];j++){
+		qsort (mat[j], size[0], sizeof(float), compare);
+		//cout<<"n= "<<mat[j][(size[0]/2)-1]<<endl;
+		if ((mat[j][(size[0]/2)-1]<najmanji)&&(mat[j][(size[0]/2)-1]!=0))
+		{
+			najmanji=mat[j][(size[0]/2)-1];
+			*tr=j;
+		}
+	}
+	//float sigma=sqrt(najmanji)/0.33724;
+	//racuna tr za p=0.01
+	//1.4142135*sigma*1.82138636
+
+	//double sigma=najmanji/0.33724;
+	//double x=2.57582929*sigma;
+	//*tr=sigma*x;
+	
+	for (j=0; i<size[0];j++){     
+		delete mat[j];
+	}
+	delete [] mat;
+
+	cvReleaseHist( &hist );
+}
+
+double* _cv_max_element( double* start, double* end )
+{
+	double* p = start++;
+	for( ; start != end; start++ )
+		if( *p < *start )
+			p = start;
+	return p;
+}
+ // vraca indeks maksimalnog umesto da vraca njegovu vrednost
+int _cv_max_element2( double* start, double* end )
+{
+	int i=0;
+	int najbolji=0;
+	double* p = start++;
+	for( ; start != end; start++ )
+	{
+		if( *p < *start ){
+			p = start;
+			najbolji=i;
+		}
+		i++;
+	}
+	return najbolji;
+}
+
+//  Function cvChangeDetection performs change detection for Foreground detection algorithm - Rosin98 poglavlje 5 - poasonova raspodela -preuzeto iz open cv ali je izmenjeno da vrati najbolji threshold a ne da theshold bude jednak navecoj sigmi
+// parameters:
+ // img - difference image
+void EstimTrRosin(IplImage* img, int* tr)
+{
+	int i, j, x, y, thres;
+	const int PIXELRANGE=256;
+	
+// create histogram
+	long HISTOGRAM[PIXELRANGE];
+	for (i=0 ; i<PIXELRANGE; i++)
+		HISTOGRAM[i]=0;
+		
+		//histogram slike razlika
+	for (y=0 ; y<img->height ; y++)
+	{
+		//uchar* rowStart1 = (uchar*)curr_frame->imageData + y * curr_frame->widthStep + b;
+		//uchar* rowStart2 = (uchar*)prev_frame->imageData + y * prev_frame->widthStep + b;
+
+		for (x=0 ; x<img->width ; x++)
+		{
+			int diff = int(CV_IMAGE_ELEM(img, uchar, y, x));
+			//int diff = abs( int(*rowStart1) - int(*rowStart2) );
+			HISTOGRAM[diff]++;
+		}
+	}
+	double relativeVariance[PIXELRANGE];
+	for (i=0 ; i<PIXELRANGE; i++)
+		relativeVariance[i]=0;
+		
+	for (thres=PIXELRANGE-2; thres>=0 ; thres--)
+	{
+		//  fprintf(stderr, "Iter %d\n", thres);
+		double sum=0;
+		double sqsum=0;
+		int count=0;
+			//   fprintf(stderr, "Iter %d entering loop\n", thres);
+		for (j=thres ; j<PIXELRANGE ; j++)
+		{
+			sum   += double(j)*double(HISTOGRAM[j]);
+			sqsum += double(j*j)*double(HISTOGRAM[j]);
+			count += HISTOGRAM[j];
+		}
+		count = count == 0 ? 1 : count;
+			// fprintf(stderr, "Iter %d finishing loop\n", thres);
+		double my = sum / count;
+		double sigma = sqrt( sqsum/count - my*my);
+			
+			//fprintf(stdout, "Iter %d sum=%g sqsum=%g count=%d sigma = %g\n", thres, sum, sqsum, count, sigma);
+			//    fprintf(stderr, "Writing to %x\n", &(relativeVariance[thres]));
+
+		relativeVariance[thres] = sigma;
+			//ja dodao da deli sa srednjom vrednostcu
+			// to je kao u papiru ali uopste neradi - dobije uvek da je najbolji tr=0
+			my = my == 0 ? 1 : my;
+			//relativeVariance[thres] = sigma/my;
+			
+			//fprintf(stderr, "Iter %d finished\n", thres);
+		//fprintf(stdout, "Iter %d sum=%g sqsum=%g count=%d sigma = %g  rVar= %g\n", thres, sum, sqsum, count, sigma,(sigma*sigma)/my);
+	}
+		
+	// find maximum - najveca sigma je optimalan treshold
+	uchar bestThres = 0;
+	double* pBestThres = _cv_max_element(relativeVariance, relativeVariance+PIXELRANGE);
+	//bestThres=(uchar)((*pBestThres)); if (bestThres <5) bestThres=5;
+	bestThres = (uchar)(*pBestThres); if (bestThres <10) bestThres=10;
+	cout<<"best tr = "<<int(bestThres)<<"   "<<endl;
+
+	
+	int bbb=_cv_max_element2(relativeVariance,relativeVariance+PIXELRANGE);
+	bestThres = bbb;
+	//if (bestThres <10) bestThres=10;
+	cout<<"najtr = "<<bbb<<endl;
+	*tr=int(bestThres);
+}
+
+
+
+
+
+
+///////////////////////////////
+//racunanje tp, tn , acc ...
+
+void calc_tn(const IplImage* gt, const IplImage* fg, IplImage* out)
+{
+	// tn=not(fg or gt)
+	cvOr(gt,fg,out);
+	cvNot(out,out);
+}
+void calc_tp(const IplImage* gt, const IplImage* fg, IplImage* out)
+{
+	cvAnd(gt,fg,out);
+}
+void calc_fn(const IplImage* gt, const IplImage* fg, IplImage* out)
+{
+	// fn = gt and (not(fg)))
+	IplImage* tmp=(IplImage*)cvClone(fg);
+	cvNot(tmp,tmp);
+	cvAnd(tmp,gt,out);
+	cvReleaseImage(&tmp);
+}
+void calc_fp(const IplImage* gt, const IplImage* fg, IplImage* out)
+{
+	// fp= fg and (not(gt))
+	IplImage* tmp=(IplImage*)cvClone(gt);
+	cvNot(tmp,tmp);
+	cvAnd(tmp,fg,out);
+	cvReleaseImage(&tmp);
+}
+
+double calc_stats(const IplImage* gt, const IplImage* fg, void (*func)(const IplImage*,const IplImage*,IplImage*), IplImage* out=NULL)
+{
+	//fg - foreground image
+	//gt - ground truth image
+	int release=0;
+	if (out==NULL)
+	{
+		out=(IplImage*)cvClone(fg);
+		release=1;
+	}
+	IplConvKernel* m=cvCreateStructuringElementEx(5,5,2,2,CV_SHAPE_RECT);
+	IplImage* tmp_fg=(IplImage*)cvClone(fg);
+	IplImage* tmp=(IplImage*)cvClone(fg);
+
+	//oduzima greske u regionu od 2 pixela u okolini granice
+	//odnosno pravi da je u tom regionu odluka dobra
+	//izvan granice je crno
+	cvDilate(gt, tmp, m);
+	cvXor(gt, tmp, tmp);
+	cvNot(tmp,tmp);
+	cvAnd(tmp,fg,tmp_fg);
+	
+	//unutar granice je belo
+	cvErode(gt, tmp, m);
+	cvXor(gt, tmp, tmp);
+	cvOr(tmp,tmp_fg,tmp_fg);
+
+	(*func)(gt,tmp_fg,out);
+
+	double out_count = double(cvCountNonZero(out));
+	if (release==1)
+	{
+		cvReleaseImage(&out);
+	}
+	cvReleaseImage(&tmp_fg);
+	cvReleaseImage(&tmp);
+	
+	return out_count;
+}
+
+double calc_sensitivity(const IplImage* gt, const IplImage* fg)
+{
+	//isto sto i recall
+	double tp = calc_stats(gt, fg, &calc_tp);
+	double fn = calc_stats(gt, fg, &calc_fn);
+	if ((tp+fn)==0)
+		return 1;
+	else
+		return (tp/(tp+fn));
+}
+
+double calc_specificity(const IplImage* gt, const IplImage* fg)
+{
+	double tn = calc_stats(gt, fg, &calc_tn);
+	double fp = calc_stats(gt, fg, &calc_fp);
+	if ((tn+fp)==0)
+		return 1;
+	else
+		return (tn/(tn+fp));
+}
+
+double calc_precision(const IplImage* gt, const IplImage* fg)
+{
+	double tp = calc_stats(gt, fg, &calc_tp);
+	double fp = calc_stats(gt, fg, &calc_fp);
+
+	if ((tp+fp)==0)
+		return 1;
+	else
+		return (tp/(tp+fp));
+}
+
+double calc_acc(const IplImage* gt, const IplImage* fg)
+{
+	return ((calc_specificity(gt,fg)+calc_sensitivity(gt,fg))/2);
+}
+
+//potpuno isto sto i filter_small_regions_closeHoles samo nije u klasi da bi se moglo jednostavno pozvati odvojeno 
+void fsr2(IplImage *img, IplConvKernel* element=NULL, int perform_morph=0, int minArea=10)
+{
+	CvSeq *first_seq = NULL, *prev_seq = NULL, *seq = NULL;
+	CvMemStorage *storage = cvCreateMemStorage();
+
+	CvScalar color = CV_RGB(255,255,255);
+	
+	if(perform_morph)
+	{
+		cvMorphologyEx(img, img, 0, element, CV_MOP_CLOSE, 1 );
+		//ovo mozda ne treba je ce mali objekti svkakoa biti izbrisani
+		//cvMorphologyEx(img, img, 0, element, CV_MOP_OPEN, 1 );
+	}
+	
+	cvFindContours( img, storage, &first_seq, sizeof(CvContour), CV_RETR_CCOMP, CV_CHAIN_APPROX_NONE);
+
+	if(minArea > 0)
+	{
+		for( seq = first_seq; seq; seq = seq->h_next )
+		{
+			CvContour* cnt = (CvContour*)seq;
+			if(fabs(cvContourArea(cnt))<minArea)
+			{
+            //delete small contour
+				prev_seq = seq->h_prev;
+				if(prev_seq)
+				{
+					prev_seq->h_next = seq->h_next;
+					if(seq->h_next) seq->h_next->h_prev = prev_seq;
+				}
+				else
+				{
+					first_seq = seq->h_next;
+					if( seq->h_next ) seq->h_next->h_prev = NULL;
+				}
+			}
+		}
+	}
+	cvZero(img);
+	for(seq=first_seq; seq != 0; seq = seq->h_next )
+	{
+		cvDrawContours(img,seq,color,color,0,CV_FILLED);
+	}
+	cvClearMemStorage(storage);
+}
+void writeBBox(IplImage *img, int minArea)
+{
+	CvSeq *first_seq = NULL, *prev_seq = NULL, *seq = NULL;
+	CvMemStorage *storage = cvCreateMemStorage();
+
+	CvScalar color = CV_RGB(255,255,255);
+	
+	//if(perform_morph)
+	//{
+		//cvSmooth(img,tmp_8u,CV_MEDIAN,7);
+		//cvOr(img,tmp_8u,img);
+
+		//cvMorphologyEx(img, img, 0, element, CV_MOP_CLOSE, 1 );
+		//ovo mozda ne treba je ce mali objekti svkakoa biti izbrisani
+	//	cvMorphologyEx(img, img, 0, element, CV_MOP_OPEN, 1 );
+	//}
+	
+	cvFindContours( img, storage, &first_seq, sizeof(CvContour), CV_RETR_CCOMP, CV_CHAIN_APPROX_NONE);
+
+	if(minArea > 0)
+	{
+		for( seq = first_seq; seq; seq = seq->h_next )
+		{
+			CvContour* cnt = (CvContour*)seq;
+			if(fabs(cvContourArea(cnt))<minArea)
+			{
+            //delete small contour
+				prev_seq = seq->h_prev;
+				if(prev_seq)
+				{
+					prev_seq->h_next = seq->h_next;
+					if(seq->h_next) seq->h_next->h_prev = prev_seq;
+				}
+				else
+				{
+					first_seq = seq->h_next;
+					if( seq->h_next ) seq->h_next->h_prev = NULL;
+				}
+			}
+		}
+	}
+	cvZero(img);
+
+	CvRect box;
+	for(seq=first_seq; seq != 0; seq = seq->h_next )
+	{
+		box=cvBoundingRect(seq,0);
+		cvRectangle(img, cvPoint(box.x,box.y),
+						cvPoint(box.x+box.width,box.y+box.height),
+						CV_RGB(255,255,255),1);
+		//writeFrame(img,rect);
+		cvDrawContours(img,seq,color,color,0,CV_FILLED);
+	}
+	cvClearMemStorage(storage);
+	cvReleaseMemStorage(&storage);
+}

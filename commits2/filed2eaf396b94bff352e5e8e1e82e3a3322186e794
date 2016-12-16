@@ -1,0 +1,40 @@
+#IncludeRegexLine: ^[ 	]*#[ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/tim/Documents/Thesis/ARPS/headers/arps.hpp
+vector
+-
+limits
+-
+opencv2/opencv.hpp
+/home/tim/Documents/Thesis/ARPS/headers/opencv2/opencv.hpp
+opencv2/highgui.hpp
+/home/tim/Documents/Thesis/ARPS/headers/opencv2/highgui.hpp
+io.hpp
+/home/tim/Documents/Thesis/ARPS/headers/io.hpp
+
+/home/tim/Documents/Thesis/ARPS/headers/io.hpp
+string
+-
+sys/types.h
+-
+sys/stat.h
+-
+unistd.h
+-
+opencv2/opencv.hpp
+/home/tim/Documents/Thesis/ARPS/headers/opencv2/opencv.hpp
+opencv2/highgui.hpp
+/home/tim/Documents/Thesis/ARPS/headers/opencv2/highgui.hpp
+
+/home/tim/Documents/Thesis/ARPS/main.cpp
+string
+-
+headers/arps.hpp
+/home/tim/Documents/Thesis/ARPS/headers/arps.hpp
+

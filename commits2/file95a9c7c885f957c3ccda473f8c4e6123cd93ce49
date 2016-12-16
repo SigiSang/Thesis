@@ -1,0 +1,234 @@
+#include <iostream>
+#include <stdio.h>
+#include <vector>
+#include <math.h>
+#include "wavelet.h"
+
+using namespace std;
+
+#define T2 1.//M_SQRT2
+#define Td2 1.//2.//M_SQRT2
+
+double C[] = {0.230377813309/T2, 0.714846570553/T2,0.6308807667930/T2,-0.027983769417/T2,
+              -0.187034811719/T2,0.030841381836/T2,0.032883011667/T2,-0.010597401785/T2};
+
+double D[] = {0.230377813309/Td2, 0.714846570553/Td2,0.6308807667930/Td2,-0.027983769417/Td2,
+	      -0.187034811719/Td2,0.030841381836/Td2,0.032883011667/Td2,-0.010597401785/Td2};
+
+double Lowpass_Filt[8]={C[7],C[6],C[5],C[4],C[3],C[2],C[1],C[0]};
+double Detail_Filt[8]={-C[0], C[1], -C[2], C[3], -C[4], C[5], -C[6], C[7]};
+
+double iLowPass_Filt[8]={D[0],D[1],D[2], D[3], D[4], D[5], D[6], D[7]};
+double iDetail_Filt[8]={D[7],-D[6],D[5], -D[4], D[3], -D[2], D[1], -D[0]};
+
+int iDetail_Filt_Length=8, iLowPass_Filt_Length=8;
+int Detail_Filt_Length=8, Lowpass_Filt_Length=8;
+
+void Wavelet_Image_Transform(double *X,double *HH,double *HL,double *LH,double *LL, int k, int width, int height,int Scale){
+
+  int i,j;
+
+  double *Row_In     = new double[width]; 
+  double *Column_In  = new double[height];
+  double *Row_Out    = new double[width]; 
+  double *Column_Out = new double[height];  
+
+   for (j=0; j<height; j++){
+ 
+     for(i=0; i<width; i++) Row_In[i] = X[i+j*width];
+
+     wtM(Row_In, Detail_Filt, Row_Out, Scale, width, Detail_Filt_Length,1); // highpass - horizontal filter
+     
+     for(i=0;i<width;i++){
+
+                      HL[i+j*width] = Row_Out[i]; 
+                      HH[i+j*width] = Row_Out[i];
+      }
+
+     wtM(Row_In, Lowpass_Filt, Row_Out, Scale, width, Lowpass_Filt_Length,1); // lowpass - horizontal filter
+
+     for(i=0;i<width;i++){
+
+                     LH[i+j*width] = Row_Out[i];
+                     LL[i+j*width] = Row_Out[i];
+     }
+   }
+
+  for (i=0; i<width; i++){
+    
+   for(j=0; j<height; j++) Column_In[j] = LL[i+j*width];
+   wtM(Column_In, Lowpass_Filt, Column_Out, Scale, height, Lowpass_Filt_Length,1);
+   for(j=0; j<height; j++) LL[i+j*width] = Column_Out[j];
+      
+   for(j=0; j<height; j++) Column_In[j] = LH[i+j*width];
+   wtM(Column_In, Detail_Filt, Column_Out, Scale, height, Detail_Filt_Length,1);
+   for(j=0; j<height; j++) LH[i+j*width] = Column_Out[j];
+
+   for(j=0; j<height; j++) Column_In[j] = HL[i+j*width];
+   wtM(Column_In, Lowpass_Filt, Column_Out, Scale, height, Lowpass_Filt_Length,1);
+   for(j=0; j<height; j++) HL[i+j*width] = Column_Out[j];
+ 
+   for(j=0; j<height; j++) Column_In[j] = HH[i+j*width];
+   wtM(Column_In, Detail_Filt, Column_Out, Scale, height, Detail_Filt_Length,1);
+   for(j=0; j<height; j++) HH[i+j*width] = Column_Out[j];
+   
+  }
+
+  delete [] Row_In;delete [] Column_In;delete [] Row_Out;delete [] Column_Out;
+
+}
+
+void Inverse_Wavelet_Image_Transform(double *Y,double *HH,double *HL,double *LH,double *LL, int k, int width, int height,int Scale){
+
+  int i,j;
+
+   double *Row_In     = new double[width]; 
+   double *Column_In  = new double[height];
+   double *Row_Out    = new double[width]; 
+   double *Column_Out = new double[height]; 
+
+   double* LLI = new double[width*height];
+   double* LHI = new double[width*height];
+   double* HLI = new double[width*height];
+   double* HHI = new double[width*height]; 
+
+    for (i=0; i<width; i++){
+    
+   for(j=0; j<height; j++) Column_In[j] = LL[i+j*width];
+   wtM(Column_In, iLowPass_Filt, Column_Out, Scale, height, iLowPass_Filt_Length,-1);
+   for(j=0; j<height; j++) LLI[i+j*width] = Column_Out[j];
+      
+   for(j=0; j<height; j++) Column_In[j] = LH[i+j*width];
+   wtM(Column_In, iDetail_Filt, Column_Out, Scale, height, iDetail_Filt_Length,-1);
+   for(j=0; j<height; j++) LHI[i+j*width] = Column_Out[j];
+
+   for(j=0; j<height; j++) Column_In[j] = HL[i+j*width];
+   wtM(Column_In, iLowPass_Filt, Column_Out, Scale, height, iLowPass_Filt_Length,-1);
+   for(j=0; j<height; j++) HLI[i+j*width] = Column_Out[j];
+ 
+   for(j=0; j<height; j++) Column_In[j] = HH[i+j*width];
+   wtM(Column_In, iDetail_Filt, Column_Out, Scale, height, iDetail_Filt_Length,-1);
+   for(j=0; j<height; j++) HHI[i+j*width] = Column_Out[j];
+   
+  }
+
+     for (j=0; j<height; j++){
+   
+     for(i=0; i<width; i++)  Row_In[i] = LLI[i+j*width];
+     wtM(Row_In, iLowPass_Filt, Row_Out, Scale, width, iLowPass_Filt_Length,-1);
+     for(i=0; i<width; i++)  LLI[i+j*width] = Row_Out[i];
+   
+     for(i=0; i<width; i++)  Row_In[i] = LHI[i+j*width];
+     wtM(Row_In, iLowPass_Filt, Row_Out, Scale, width, iLowPass_Filt_Length,-1);
+     for(i=0; i<width; i++)  LHI[i+j*width] = Row_Out[i];
+   
+     for(i=0; i<width; i++)  Row_In[i] = HLI[i+j*width];
+     wtM(Row_In, iDetail_Filt, Row_Out, Scale, width, iDetail_Filt_Length,-1);
+     for(i=0; i<width; i++)  HLI[i+j*width] = Row_Out[i];
+   
+     for(i=0; i<width; i++)  Row_In[i]=HHI[i+j*width];
+     wtM(Row_In, iDetail_Filt, Row_Out, Scale, width, iDetail_Filt_Length,-1);
+     for(i=0; i<width; i++)  HHI[i+j*width]=Row_Out[i];
+   }
+
+   for(j=0; j<height; j++)
+     for(i=0; i<width; i++)  Y[i+j*width] = (HHI[i+j*width]+LLI[i+j*width]+HLI[i+j*width]+LHI[i+j*width])/4.;
+
+  delete [] Row_In;delete [] Column_In;delete [] Row_Out;delete [] Column_Out;
+  delete [] LLI;delete [] LHI;delete [] HLI;delete [] HHI;
+
+}
+
+void wtM(double *a, double *h, double *c, int p, int N, int D,int tr){
+
+  int i,j,Dext,I1,I2,len,t,M;
+  double *he;
+
+   t = (int)_ROUND(pow(2.,p));
+   M = (D-1)*t+1;
+  
+   he = new double[M];
+
+/* Extending the impulse response h: Putting 2^p-1 zeros between the coefficients of h*/
+
+   for(i=0; i<M; i++)    he[i]=0;      // putting zeros between
+   for(i=0; i<D; i++)    he[i*t] = h[i]; // upsampling of the filter
+
+/* Convolution: c=conv(ap,he) */
+
+   if (tr==1) cconv(c,he,M,a,N);
+   else       cconv1(c,he,M,a,N);
+
+   
+      delete [] he;
+       
+}
+
+void cconv1(double *z,double *x, int M, double *y, int N)
+     /* M <= N */
+{
+  double *temp, *ytemp;
+  int i;
+  
+  ytemp = new double[M+N-1];
+
+  for(i=0;i<N;i++) ytemp[i+M-1] = y[i]; 
+
+  for(i=0;i<M-1;i++)  ytemp[i] = ytemp[i+N];  // periodical extension to the left
+
+  temp = new double[N+2*M-2];
+  conv(temp,x,M,ytemp,M+N-1);
+  
+  for(i=0;i<N;i++) z[i] = temp[i+M-1]; 
+
+  delete [] temp; delete [] ytemp;  
+}
+
+void cconv(double* z,double *x, int M, double *y, int N)
+     /* M <= N */
+{
+  double *temp, *ytemp;
+  int i;
+  
+  ytemp = new double[M+N-1];       // dimension of convolution
+
+  for(i=0;i<N;i++) ytemp[i] = y[i];
+
+  for(i=0;i<M-1;i++) ytemp[N+i] = ytemp[i];   // perioical extension from N to N+M-1 ( to the right )
+
+  temp = new double[N+2*M-2];
+
+  conv(temp,x,M,ytemp,N+M-1);
+  
+  for(i=0;i<N;i++)  z[i] = temp[i+M-1];  // output of the convololution + cut endings
+
+  delete [] temp; delete [] ytemp;
+
+} 
+
+void conv(double* z,double *x, int M, double *y, int L)
+     /* M <= L */
+{
+
+  // L = M + N - 1; M - length of the filter ; N - lenght of the original data
+
+ double *temp;
+ double c;
+ int i,j;
+
+ temp = new double[L+2*M-2];
+
+ for(i=0;i<L+2*M-2;i++) temp[i]=0.;
+ 
+ for(i=0;i<L;i++) temp[i+M-1] = y[i]; 
+
+ for(i=0;i<M+L-1;i++)
+   {
+     c=0.0;
+     for(j=0;j<M;j++) c += x[M-j-1]*temp[i+j];
+     z[i]=c;
+   }
+
+ delete [] temp;
+
+}        

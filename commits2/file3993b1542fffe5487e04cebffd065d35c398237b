@@ -1,0 +1,14 @@
+#include "avi.h"
+#include <math.h>
+#include "tools.h"
+
+#define DIMD 9
+
+static int koefic1[9] = {1,2,1,0,0,0,-1,-2,-1}; // coefficients for sobel operator
+static int koefic2[9] = {-1,0,1,-2,0,2,-1,0,1}; // coefficients for sobel operator
+
+int* histo(tFrame*,FILE*,int);
+double NoiseEstimation(tFrame*,int,int);
+void SobelOperator(tFrame*,int *,int,int);
+int findsecmax(int*);
+double NoiseEstimationW(double *,double *,double *,double *,int,int,int,FILE *);

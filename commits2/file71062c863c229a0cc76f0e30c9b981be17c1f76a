@@ -1,0 +1,194 @@
+#ifndef _mcwf_h_
+#define _mcwf_h_
+
+#include <time.h>
+#include <opencv/cvaux.h>
+#include <opencv/highgui.h>
+#include <opencv2/opencv.hpp>
+#include "wavelet.h"
+#include "tools.h"
+#include "wf.h"
+#include "mme.h"
+#include "avi.h"
+#include "sf.h"
+#include "noiseest.h"
+
+using namespace cv;
+
+const string DIR_INPUT = "input/Zlokolica/";
+const string DIR_OUTPUT = "output/Zlokolica/";
+const string FN_LAP_P = DIR_INPUT+"Lap_p.dat";
+const string FN_LAP_K = DIR_INPUT+"Lap_kurtosis.dat";
+const string avi_outST = DIR_OUTPUT+"st.avi";
+const string avi_outMVF = DIR_OUTPUT+"mvf.avi";
+const bool GENERATE_OUTPUT = true;
+
+class Mcwf {
+public:
+	Mcwf(int nframes,int width,int height){ init(nframes,width,height); }
+	~Mcwf(){ term(); }
+
+	bool hasNext();
+	void next(const Mat& src, Mat& dst);
+
+protected:
+	int nframes,idxNextFrame; 
+
+	FILE *fp,*fp2,*fp3,*fp5; // TR Uses disabled
+
+	FILE *fpLap_p,*fpLap_kurtosis;
+
+	double *Lap_p,*Lap_kurtosis;
+
+	/* TR START overschakeling naar frame-by-frame *
+	VideoCapture noisy_video,nfree_video; /* TR END */
+	IplImage *nframe,*rframe,*cframe,*pframe;
+
+	/* Uses disabled *
+	tAVI_RGB seq_in; /* */
+	tAVI_RGB seq_outST,seq_orig,seq_outT,seq_mv,seq_dif,seq_ll,seq_lh,seq_hl,seq_hh,seq_ll2,seq_lh2,seq_hl2,seq_hh2,seq_llU,seq_lhU,seq_hlU,seq_hhU,seq_ll2U,seq_lh2U,seq_hl2U,seq_hh2U,seq_llV,seq_lhV,seq_hlV,seq_hhV,seq_ll2V,seq_lh2V,seq_hl2V,seq_hh2V;
+
+	int width,height,s;
+
+	double Variance,amot,sigma,sigmaM,sigmaU,sigmaMU,sigmaV,sigmaMV,THR,thrhl,thrlh,thrhh,sigmaAI,sigmaAII;
+
+	tFrame *frame_in;      //   input frames seq
+	tFrame *frame_orig;    //   original frames seq (t)
+	tFrame *frame_orig_pr;    //   original frames seq (t-1)
+
+	tFrame *frame_stf,*frame_outY,*frame_origY,*frame_mv,*frame_dif;
+	tFrame *frame_hh,*frame_hl,*frame_lh,*frame_ll;
+	tFrame *frame_hh2,*frame_lh2,*frame_hl2,*frame_ll2;
+
+	tFrame *frame_hhU,*frame_hlU,*frame_lhU,*frame_llU;
+	tFrame *frame_hhV,*frame_hlV,*frame_lhV,*frame_llV;
+
+	int NX,NY;
+
+	V2D *D;
+
+	double *madU0,*madV0,*madV,*madU,*mad0,*mad0LL,*mad0LH,*mad0HL,*mad0HH,*madLL,*madLH,*madHL,*madHH,*mad0LL2,*mad0LH2,*mad0HL2,*mad0HH2,*madLL2,*madLH2,*madHL2,*madHH2,*madLLs,*madLHs,*madHLs,*madHHs,*madLL2s,*madLH2s,*madHL2s,*madHH2s ;
+
+	double *X;
+	double *U;
+	double *V;
+	double *XOP;
+
+	double *XO;
+	double *UO;
+	double *VO;
+
+	double *UP;
+	double *VP;
+
+	double *R;
+	double *G;
+	double *B;
+
+	double *RO;
+	double *GO;
+	double *BO;
+
+	int *XC;
+	int *XP;
+
+	double *UF;
+	double *VF;
+
+	double *UFO;
+	double *VFO;
+
+	double *UM;
+	double *VM;
+
+	double *LLUF;
+	double *LHUF;
+	double *HLUF;
+	double *HHUF;
+
+	double *LLVF;
+	double *LHVF;
+	double *HLVF;
+	double *HHVF;
+
+	double *LL;
+	double *LH;
+	double *HL;
+	double *HH;
+	double *LL2;
+	double *LH2;
+	double *HL2;
+	double *HH2;
+
+	double *LLV;
+	double *LHV;
+	double *HLV;
+	double *HHV;
+	double *LL2V;
+	double *LH2V;
+	double *HL2V;
+	double *HH2V;
+
+	double *LLU;
+	double *LHU;
+	double *HLU;
+	double *HHU;
+	double *LL2U;
+	double *LH2U;
+	double *HL2U;
+	double *HH2U;
+
+	double *LLVP;
+	double *LHVP;
+	double *HLVP;
+	double *HHVP;
+	double *LL2VP;
+	double *LH2VP;
+	double *HL2VP;
+	double *HH2VP;
+
+	double *LLUP;
+	double *LHUP;
+	double *HLUP;
+	double *HHUP;
+	double *LL2UP;
+	double *LH2UP;
+	double *HL2UP;
+	double *HH2UP;
+
+	double *LLO;
+	double *LHO;
+	double *HLO;
+	double *HHO;
+	double *LL2O;
+	double *LH2O;
+	double *HL2O;
+	double *HH2O;
+
+	double *LLP;
+	double *LHP;
+	double *HLP;
+	double *HHP;
+	double *LLP2;
+	double *LHP2;
+	double *HLP2;
+	double *HHP2;
+
+	double *alphaI;
+	double *alphaII;
+
+	double *YS;
+	double *YT;
+
+	double getTime();
+	void tic();
+	void toc();
+	void Frame2Array(IplImage* image, double* LL, int chan);
+	void Frame2IArray(IplImage* image, int* LL, int chan);
+	void Sqr2Frame(IplImage* image, IplImage* oimage);
+	void SqrdFrame(double* in, double* oim, int width, int height);
+	void init(int nframes,int width,int height);
+	void term();
+};
+
+#endif

@@ -1,0 +1,534 @@
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <cmath>
+#include "Gamma.h"
+#include "wf.h"
+
+using namespace std;
+
+//#define ITMAX 1000  // was 100
+//#define EPS 3.0e-7
+//#define FPMIN 1.0e-30
+//#define SigIntDEF 1. // can go from 0.5 to 1.
+//#define LBTHR 1e-10
+//#define WS 3 
+//#define TOP_THRESH 1000000
+//#define MAXS 10000000
+
+void rem_noise_GenLap(double *WB,double *WBO,double sigma,int scale, double* Lap_p, double* Lap_kurtosis, int numb,int width,int height,int W,FILE *fp){
+
+  // estimate parameters of the pdf of noise free wavelet coefficients
+  // generalized Laplacian model exp(-|x|/s)^p is assumed
+    
+    double max=0.;
+	int Lim;
+    double p,s,I,PrFac,T;
+   
+    T = sigma*SigIntDEF;  // threshold for pdf
+
+    FindGenLapPar(WB,sigma,p,s,width,height,Lap_kurtosis,Lap_p,numb);
+
+    //cout<<"p= "<<p<<" s= "<<s<<endl;
+
+    if(s != MAXS){
+                   I = incgamma(pow(sigma/s,p),1./p);
+                   PrFac = (1.-I)/I;
+    }
+    else PrFac = 0.;  // standard deviation is smaller then sigma of noise so all coefficients should be put to zero
+
+      //cout<<"PrFac = "<<PrFac<<endl;
+
+     if(PrFac<0.000006)  PrFac = 0.;
+
+     if(PrFac == 0.) {    for(int n=0;n<height;n++)
+                            for(int m=0;m<width;m++) WBO[n*width+m] = 0.;
+     }
+     else{
+           for(int n=0;n<height;n++)
+	     for(int m=0;m<width;m++) if(WB[n*width+m]>max) max = WB[n*width+m];
+          
+	   Lim = (int)ceil(max);  // define the resolution for wavelet coefficients
+
+	   //cout<<"Lim = "<<Lim<<endl;
+
+	   double *LR = new double[Lim+1];
+           double *PR = new double[Lim+1];
+           double *pdf_mag_signal = new double[Lim+1];
+           double *pdf_mag_noise = new double[Lim+1];
+           double *pdf_as = new double[Lim+1];
+           double *pdf_an = new double[Lim+1];
+
+           MagPDFs_varT(LR,pdf_mag_signal,pdf_mag_noise,p,s,sigma,T,Lim,fp);
+
+           AverageMagPDFs(PR,pdf_as,pdf_an,pdf_mag_signal,pdf_mag_noise,Lim,W,fp);
+
+           genlikE_shrink(WB,WBO,width,height,LR,PR,(Lim+1),(Lim+1),PrFac,W);
+          
+	   delete [] LR;delete [] PR; delete [] pdf_mag_signal; delete [] pdf_mag_noise; delete [] pdf_as; delete [] pdf_an;
+     }
+           
+}
+
+void FindGenLapPar(double *WB,double sigma,double &p,double &s,int width,int height,double *Lap_kurtosis,double *Lap_p,int numb){
+
+  double m4 = 0.,mean = 0.;   // mean values
+  double stdn = 0.;            // standard deviatioin 
+  int i = 0;
+  double Q,K;
+  int loop = 1;
+
+  //cout<<"sigma= "<<sigma<<endl;
+
+       for(int n=0;n<height;n++)
+         for(int m=0;m<width;m++) {
+                                    m4 += pow(WB[n*width+m],4.);
+                                    mean += WB[n*width+m];
+	 }
+
+       mean /= (height*width);  // mean value of WB  
+       m4 /= (height*width);     // mean value of WB^4
+
+       //   cout<<"m4 "<<m4<<endl;
+
+         for(int n=0;n<height;n++)
+	   for(int m=0;m<width;m++) stdn += (WB[n*width+m]-mean)*(WB[n*width+m]-mean);
+
+	 stdn /= (height*width);
+
+	 //cout<<"stdn "<<sqrt(stdn)<<endl;
+         //stdn = sqrt(stdn);         // standard deviation of WB in a global scence
+
+     Q = (m4 + 3*pow(sigma,4.) - 6*stdn*(sigma*sigma))/((stdn-sigma*sigma)*(stdn-sigma*sigma));
+
+     //cout<<"Q "<<Q<<endl;
+
+    double Diff = 1000000.,Diff_old;
+
+    while(loop){
+                           K = Lap_kurtosis[i++];
+                           Diff_old = Diff;
+                           Diff = fabs(Q-K);
+  
+		      if ((i>(numb-1))||(Diff>Diff_old)) loop = 0;
+    } // while
+
+      p = Lap_p[i-1]; 
+
+      //if(p==0) cout<<i<<endl;
+     
+	  if(stdn>(sigma*sigma)) s = sqrt((stdn-sigma*sigma)*Gamma(1./p)/Gamma(3./p));
+      else s = MAXS; // then all coeficients should be zero 
+
+}
+
+double incgamma(double a,double x){
+
+	void gcf(double *gammcf, double a, double x, double *gln);
+	void gser(double *gamser, double a, double x, double *gln);
+    
+	double gamser,gammcf,gln;
+
+	if (x < 0.0 || a <= 0.0) { cout<<"Invalid arguments in routine gammq"<<endl; exit(1);}
+	if (x < (a+1.0)) {
+		gser(&gamser,a,x,&gln);
+		return 1.0-gamser;
+	} else {
+		gcf(&gammcf,a,x,&gln);
+		return gammcf;
+	}
+}
+
+void gcf(double *gammcf, double a, double x, double *gln)
+{
+	double gammln(double xx);
+   
+	int i;
+	double an,b,c,d,del,h;
+
+	*gln=gammln(a);
+	b=x+1.0-a;
+	c=1.0/FPMIN;
+	d=1.0/b;
+	h=d;
+	for (i=1;i<=ITMAX;i++) {
+		an = -i*(i-a);
+		b += 2.0;
+		d=an*d+b;
+		if (fabs(d) < FPMIN) d=FPMIN;
+		c=b+an/c;
+		if (fabs(c) < FPMIN) c=FPMIN;
+		d=1.0/d;
+		del=d*c;
+		h *= del;
+		if (fabs(del-1.0) < EPS) break;
+	}
+	if (i > ITMAX) { cout<<"a too large, ITMAX too small in gcf"<<endl; exit(1);}
+	*gammcf=exp(-x+a*log(x)-(*gln))*h;
+}
+
+void gser(double *gamser, double a, double x, double *gln)
+{
+	double gammln(double xx);
+    
+	int n;
+	double sum,del,ap;
+
+	*gln=gammln(a);
+	if (x <= 0.0) {
+	  if (x < 0.0) { cout<<"x less than 0 in routine gser"<<endl; exit(1); }
+		*gamser=0.0;
+		return;
+	} else {
+		ap=a;
+		del=sum=1.0/a;
+		for (n=1;n<=ITMAX;n++) {
+			++ap;
+			del *= x/ap;
+			sum += del;
+			if (fabs(del) < fabs(sum)*EPS) {
+				*gamser=sum*exp(-x+a*log(x)-(*gln));
+				return;
+			}
+		}
+		cout<<"a too large, ITMAX too small in routine gser"<<endl;
+		return;
+	}
+}
+
+/* (C) Copr. 1986-92 Numerical Recipes Software ,#). */
+double gammln(double xx)
+{
+	double x,y,tmp,ser;
+	static double cof[6]={76.18009172947146,-86.50532032941677,
+		24.01409824083091,-1.231739572450155,
+		0.1208650973866179e-2,-0.5395239384953e-5};
+	int j;
+
+	y=x=xx;
+	tmp=x+5.5;
+	tmp -= (x+0.5)*log(tmp);
+	ser=1.000000000190015;
+	for (j=0;j<=5;j++) ser += cof[j]/++y;
+	return -tmp+log(2.5066282746310005*ser/x);
+}
+/* (C) Copr. 1986-92 Numerical Recipes Software ,#). */
+
+void MagPDFs_varT(double* ratio_pdf_mag,double *pdf_mag_signal,double* pdf_mag_noise,double p,double s,double sigma,double T,int Lim,FILE *fp){
+
+  //Compute pdfs p(m|0) and p(m|1) in the range m=0:Lim
+
+      int L = 2*Lim+1;
+      double sum_pdf_sigref = 0.,sum_pdf_insig = 0.;
+
+      double* pdf_sigref = new double[L];
+      double* pdf_insig = new double[L];
+      double* pdf_purenoise = new double[L];
+      double* pdf_signal = new double[L];
+      double* pdf_noise = new double[L];
+
+      double* pdf_mag_signal_c = new double[Lim+1];
+      double* pdf_mag_noise_c = new double[Lim+1];
+
+     int* x = new int[L];
+     for(int i=-Lim;i<Lim+1;i++) x[i+Lim] = i;
+
+     //pdf of pure noise
+
+     for(int i=0;i<L;i++) pdf_purenoise[i] = (1./(sigma*sqrt(2*M_PI)))*exp(-(x[i]*x[i])/(2*sigma*sigma));
+
+     //estimated pdf of noise-free signal
+
+     for(int i=0;i<L;i++){
+ 
+                             if(abs(x[i])<T)   pdf_sigref[i] = 0; else pdf_sigref[i] = pow(exp(-abs(x[i])/s),p);
+                             if(abs(x[i])>T)   pdf_insig[i] = 0; else pdf_insig[i] = pow(exp(-abs(x[i])/s),p);
+
+				sum_pdf_sigref += pdf_sigref[i];
+                                sum_pdf_insig += pdf_insig[i];
+
+     }
+
+              if(sum_pdf_sigref==0){
+
+                            for(int i=0;i<Lim+1;i++) {
+                                                             ratio_pdf_mag[i] = 0.;
+                                                             pdf_mag_signal[i] = 0.;
+                                                             pdf_mag_noise[i] = 0.;
+				   }
+	      }
+	      else{    
+                                      for(int i=0;i<L;i++){
+                                                                pdf_sigref[i] = pdf_sigref[i]/sum_pdf_sigref;   
+                                                                pdf_insig[i] = pdf_insig[i]/sum_pdf_insig;
+				      }
+
+	                           // pdf of significant signal + noise:
+   
+					convolution(pdf_sigref,L,pdf_purenoise,L,pdf_signal); // convolution
+   
+                                // pdf of insignificant signal + noise:
+
+                                    convolution(pdf_insig,L,pdf_purenoise,L,pdf_noise); // convolution
+
+                             // pdfs of coefficient magnitudes:
+
+                       for(int i=0;i<Lim+1;i++) {  
+
+                               pdf_mag_noise[i] = 2*pdf_noise[Lim+i];
+                               pdf_mag_noise_c[i] = pdf_mag_noise[i];             // to prevent numerical errors:
+                               pdf_mag_signal[i] = 2*pdf_signal[Lim+i];
+                               pdf_mag_signal_c[i] = pdf_mag_signal[i];          // to prevent numerical errors:
+		       }
+                        // to prevent numerical errors:
+
+               for(int i=0;i<Lim;i++){
+
+		 //if(Lim==257) fprintf(fp," %d %e \n",i,pdf_mag_signal[i]);
+
+		 if(pdf_mag_noise_c[i]<(double)(1e-10)){
+
+                                                            pdf_mag_noise_c[i+1] = pdf_mag_noise_c[i];
+                                                            pdf_mag_signal_c[i+1] = pdf_mag_signal_c[i];
+				 }
+
+		 //if(Lim==257) fprintf(fp," %d %e \n",i,pdf_mag_noise_c[i]);
+	       }
+
+               for(int i=0;i<Lim+1;i++) {
+                                          ratio_pdf_mag[i] = pdf_mag_signal_c[i]/pdf_mag_noise_c[i];
+                                          //if(Lim==257) fprintf(fp," %d %e \n",i,ratio_pdf_mag[i]);
+	       }
+               //for(int i=0;i<Lim+1;i++) if(ratio_pdf_mag[i]>TOP_THRESH) ratio_pdf_mag[i] = TOP_THRESH;
+
+       }// else
+
+	      delete[] pdf_sigref; delete [] pdf_insig; delete [] pdf_purenoise; delete [] pdf_signal; delete [] pdf_noise;
+              delete[] pdf_mag_signal_c; delete [] pdf_mag_noise_c;
+
+}
+
+void AverageMagPDFs(double *r,double *pdf_as,double *pdf_an,double *pdf_s,double *pdf_n,int Lim,int W,FILE *fp){
+
+  double sum_pdf_s = 0.,sum_pdf_as=0.,sum_pdf_an=0.;
+  double max_pdf_an = 0.; 
+  int ind; // index of maximum
+  int L = Lim+1;
+
+  double *pdf_as_out = new double[2*L-1];
+  double *pdf_an_out = new double[2*L-1];
+
+  for(int i=0;i<L;i++) sum_pdf_s += pdf_s[i];
+
+  if(sum_pdf_s==0){
+
+    for(int i=0;i<L;i++){
+
+                     r[i] = 0.;
+                     pdf_as[i] = 0.;
+                     pdf_an[i] = 0.;
+    }
+  }
+  else{
+
+    int Count = 2*W-1;
+     
+    for(int i=0;i<L;i++){
+
+             pdf_as[i] = pdf_s[i];
+             pdf_an[i] = pdf_n[i];
+ 
+    }  // 
+
+
+    for(int c=0;c<Count;c++){
+
+          convUnCut(pdf_as,L,pdf_s,L,pdf_as_out);
+
+          subsample(pdf_as_out,(2*L-1),pdf_as,L,2);
+
+          convUnCut(pdf_an,L,pdf_n,L,pdf_an_out);
+
+          subsample(pdf_an_out,(2*L-1),pdf_an,L,2);
+    
+    } // calculate multiple convolution to get pdf of averaged coefficients in the choosen window
+
+          for(int i=0;i<L;i++){
+ 
+             sum_pdf_as += pdf_as[i];
+             sum_pdf_an += pdf_an[i];
+
+	  } // calculate sums
+
+	  //cout<<sum_pdf_as<<endl;
+
+          for(int i=0;i<L;i++){
+
+	    pdf_as[i] /= sum_pdf_as;
+            pdf_an[i] /= sum_pdf_an;
+	  }// averaged values
+
+	  //if(Lim==257) for(int i=0;i<L;i++) fprintf(fp," %d %e \n",i,pdf_an[i]);
+
+    //   % Estimate the ratio of pdf_as/pdf_an 
+
+        int k=0;
+	
+          while(pdf_an[k]==0.){
+                                  k = k+1;
+	  }
+          for(int i=0;i<k;i++) r[i] = 0.;
+
+	  // to prevent numerical errors
+
+   for(int i=0;i<L;i++){
+
+             pdf_an[i] = 1000*pdf_an[i];
+             pdf_as[i] = 1000*pdf_as[i];
+             
+	     if(pdf_an[i]>max_pdf_an) { max_pdf_an = pdf_an[i]; ind = i;} // finding maximum value
+
+   }  
+
+   //cout<<ind<<endl;
+
+   //if(Lim==257) for(int i=0;i<L;i++) fprintf(fp," %d %e \n",i,pdf_as[i]);
+
+   for(int i=ind;i<L-1;i++){
+
+     //if(Lim==257) fprintf(fp," %d %e \n",i,pdf_as[i]);
+
+     if(pdf_an[i]<(double)(1e-10)){
+
+                                                       pdf_an[i+1] = pdf_an[i];
+                                                       pdf_as[i+1] = pdf_as[i];
+				 }
+	       }
+
+   for(int i=k;i<Lim+1;i++)     {  
+                                       r[i] =  pdf_as[i]/pdf_an[i];
+                                       //if(Lim==257) fprintf(fp," %d %e \n",i,r[i]);
+   }
+  
+   //for(int i=k;i<Lim+1;i++)     if(r[i]>TOP_THRESH) r[i] = TOP_THRESH;
+
+  }// else
+
+   delete [] pdf_as_out; delete [] pdf_an_out;
+
+}
+
+void subsample(double* pdf_out,int l,double* pdf,int m,int s){
+
+  for(int i=0;i<m;i++){ if(s*i<l) pdf[i] = s*pdf_out[s*i]; 
+                          else     pdf[i] = 0.;  
+  }
+}
+
+void convolution(double * data, int n, double* resp, int m, double* out){
+
+  int L = m+n-1;
+
+   double *output = new double[L]; // output convolution
+   for(int i=0;i<L;i++) output[i] = 0;  // initializaton
+
+    for(int i=0;i<L;i++)
+      for(int k=0;k<m;k++){
+ 
+                               output[i] += resp[k]*((((i-k)<0)||((i-k)>=n))?(0):(data[i-k]));
+	   }
+
+    //for(int i=0;i<L;i++) cout<<output[i]<<"\t";cout<<endl;
+
+  int SV = (m-1)/2;
+  int EV = L - SV;
+
+  //cout<<"SV "<<SV<<" EV "<<EV<<endl;
+
+  for(int i=SV;i<EV;i++) out[i-SV] = output[i];  // cutting ends
+
+  delete [] output;
+}
+
+void convUnCut(double * data, int n, double* resp, int m, double* out){
+
+  int L = m+n-1;
+
+  //double *output = new double[L]; // output convolution
+   for(int i=0;i<L;i++) out[i] = 0;  // initializaton
+
+    for(int i=0;i<L;i++)
+      for(int k=0;k<m;k++){
+ 
+                               out[i] += resp[k]*((((i-k)<0)||((i-k)>=n))?(0):(data[i-k]));
+	   }
+}
+
+void genlikE_shrink(double *X, double *P, int M, int N, double *Likelihood_ratio, double *Prior_ratio, int len_l, int len_p, double r, int W){
+ 
+   int i,j,k,u,v,L,m,H1,H2,V1,V2,e;
+   double Energy,Eta,Ksi,Count,Shrink;
+
+   L=M*N;
+   double *Measure = new double[L]; 
+
+    for(i=0; i<M; i++)
+      for(j=0; j<N; j++) Measure[i+j*M] = fabs(X[j*M+i]);
+
+
+      for(i=0; i<M; i++)
+	for(j=0; j<N; j++){
+      
+                              k = i+j*M;
+			      m = (int)_ROUND(Measure[k]);
+                                  
+                        if (m>len_l-1)   m = len_l-1;
+      
+                     Ksi = Likelihood_ratio[m];
+
+   
+      /* Determine the local window*/      
+      if(i>=W) H1=W;
+      else H1=i;
+
+      if(i<M-W) H2=W;
+      else H2=M-i-1;
+
+      if(j>=W) V1=W;
+      else V1=j;
+
+      if(j<N-W) V2=W;
+      else V2=N-j-1;
+     
+       /* The local window specified*/      
+
+     Energy=0;
+     Count=-1;
+
+      for(u=i-H1; u<i+H2+1; u++){
+	for(v=j-V1; v<j+V2+1; v++){
+                                    Energy+=fabs(X[u+v*M]);
+                                    Count+=1;
+         }
+      }// u,v
+
+      Energy = (Energy-fabs(X[j*M+i]))/Count;
+      e = (int)_ROUND(Energy);
+      
+       if (e>len_p-1)   e = len_p-1;
+
+       Eta = r*Prior_ratio[e];
+
+       Shrink = (Ksi*Eta/(1.+Ksi*Eta));
+
+       //cout<<"Prior_ratio[e]= "<<Prior_ratio[e]<<" e = "<<e<<" len_p = "<<len_p<<endl;
+
+       //cout<<"SHRINK = "<<Shrink<<endl;
+
+       P[k] = X[k]*Shrink;
+	  
+	}
+
+      delete [] Measure;
+             
+}

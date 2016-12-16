@@ -1,0 +1,21 @@
+#include <string>
+
+#include "headers/arps.hpp"
+
+int main(int argc, char** argv){
+
+	/* Input */
+	Mat imgP,imgI;
+	int mbSize = 16;
+	int p = 7;
+	imgI = imread("input/frame00000.png",CV_LOAD_IMAGE_GRAYSCALE);
+	imgP = imread("input/frame00001.png",CV_LOAD_IMAGE_GRAYSCALE);
+
+	/* Output */
+	vector<ARPS::coordinate> motionVect;
+	double ARPScomputations;
+
+	ARPS::motionEstARPS(imgP,imgI,mbSize,p,motionVect,ARPScomputations);
+
+	return 0;
+}

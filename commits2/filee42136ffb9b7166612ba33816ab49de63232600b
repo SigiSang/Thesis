@@ -1,0 +1,184 @@
+#include "noiseest.h"
+#include <iostream>
+
+using namespace std;
+
+double NoiseEstimation(tFrame* in_image,int width,int height){
+
+  double sigma; // standard deviation of the gaussian noise
+  int *lum = new int[256]; // for histogram
+  int ymax,xmax;
+  double betta = 0.266;
+  double alpha = - 0.877;
+
+    for(int i=0;i<255;i++) lum[i]=0; // initialization
+
+    SobelOperator(in_image,lum,width,height);
+
+    ymax = findsecmax(lum);
+    xmax = lum[ymax];
+
+    sigma = alpha + betta*xmax;
+
+    delete [] lum;
+
+    return sigma;
+
+}
+
+void SobelOperator(tFrame* in_image,int *lum,int width,int height){
+
+  double Z = 0.;
+  double G = 0.;
+  int exit;
+  int x[9];
+
+   for (int i=0;i<255;i++) lum[i] = 0;   
+
+  for(int n=1;n<height-1;n++)
+    for(int m=1;m<width-1;m++){
+
+      for (int j = -1; j < 2; j++)
+        for (int i = -1; i < 2; i++)  x[i+1+(j+1)*3] = in_image->GetComponent(m+i,n+j,0);
+
+        for(int i=0;i < DIMD;i++) Z += (double)(koefic1[i]*x[i]);
+        for(int i=0;i < DIMD;i++) G += (double)(koefic2[i]*x[i]); 
+              
+	exit = (int)_ROUND(sqrt(G*G +Z*Z)); 
+        if (exit>255) {exit=255;}
+        lum[exit]++;              // calculating for histogram evaluation of sobel operator output image
+
+   // initializing for next step
+      Z=0.;G=0.;
+    }
+
+   	// averaging histogram to avoid local maximums
+
+   for (int i=2;i<252;i++) { lum[i] = (lum[i-2] + lum[i-1] + lum[i] + lum[i+1] + lum[i+2])/5;} 
+   for (int i=2;i<252;i++) { lum[i] = (lum[i-2] + lum[i-1] + lum[i] + lum[i+1] + lum[i+2])/5;} 
+   for (int i=2;i<252;i++) { lum[i] = (lum[i-2] + lum[i-1] + lum[i] + lum[i+1] + lum[i+2])/5;} 
+
+}  
+
+int findsecmax(int* dat){
+
+  int hmaxx = 0; // horizontal axis of histogram
+  int vmaxx = 0; // vertical axis of histogram
+  for(int i=0;i<254;i++) {
+    
+    if (dat[i] > vmaxx) {vmaxx = dat[i];hmaxx = i;} 
+  }
+ 
+    if (hmaxx < 8 ){ // if the noise level is too small because in that case first peak in the histogram can very big
+                     vmaxx = 0;
+                     for(int i=8;i<254;i++) if (dat[i] > vmaxx) {vmaxx = dat[i];hmaxx = i;}
+  }    
+ 
+  return hmaxx;
+}
+
+int* histo(tFrame* in_image, FILE* fp,int s,int width,int height){
+
+  int *lum = new int[256];
+  int lumpr;
+
+   for (int i=0;i<255;i++) lum[i] = 0; //initalization 
+
+        for(int n = 0; n < height;n++)
+          for(int m = 0; m < width;m++) {
+            
+	    lumpr = in_image -> GetComponent(m,n,0);    
+            lum[lumpr*s]++;
+  }//m,n
+	//for (int i=0;i<256;i++)  printf("%d :  %d \n",i,lum[i].bpv);
+	for (int i=2;i<252;i++) { lum[i] = (lum[i-2] + lum[i-1] + lum[i] + lum[i+1] + lum[i+2])/5;} 
+        for (int i=0;i<255;i++)  fprintf(fp,"%d %d \n",i,lum[i]);
+
+ return lum;
+}
+
+double NoiseEstimationW(double *LL,double *LH,double *HL,double *HH,int width,int height,int k,FILE *fp){
+
+  int *edge = new int[width*height];
+  int m,n,i,p;  // position
+  int imaxx,max = 0;
+  double vmaxx,maxx = 0.;
+  int sum_hist = 0;
+  double b,sigma,lum_dsq = 0;
+  int pix_tiac = 0;
+  double sigma_out,length_sam = (double)(width*height);
+ 
+          for(n = 0; n <height;n++)
+             for(m = 0; m <width;m++) {
+
+	         p = m + n*width;
+
+		 edge[p] =  (int)_ROUND(sqrt(LH[p]*LH[p] + HL[p]*HL[p]));  //(int)_ROUND((fabs(LH[p]) + fabs(HL[p])));
+               
+                if(edge[p]>=max) max = edge[p];
+	     }
+
+        int *lum = new int[max+1];
+        double *lum_d = new double[max+1];
+
+         for(i=0;i<=max;i++) lum[i] = 0; //initialization
+
+           for(n = 0; n <height;n++)
+             for(m = 0; m <width;m++) {
+                                          p = m + n*width;
+	                                  lum[edge[p]]++;                                               
+	      }
+
+	   for(i=0;i<=max;i++) lum_d[i] = (double)lum[i];
+
+	   //******** gamma fitting *****************//
+
+	   //for(i=0;i<max;i++) sum_hist += lum[i];
+
+	  //cout<<sum_hist<<endl;
+
+	  //for(i=0;i<=max;i++) { lum_d[i] = (double)lum[i]/sum_hist; lum_dsq += (double)(i*lum[i]);}
+
+	       //b = lum_dsq/(3.*length_sam);
+
+	  //b = sqrt((double)lum_dsq/(height*width));
+
+	  // sigma = -0.0392*b*b + 3.2470*b - 12.1786;
+ 
+	   //cout<<b<<"\t"<<sigma<<"\t"<<lum_dsq<<endl;
+
+	       //**************************************************//
+
+	 for (i=2;i<=(max-2);i++) { lum_d[i] = (double)(lum_d[i-2] + lum_d[i-1] + lum_d[i] + lum_d[i+1] + lum_d[i+2])/5.;} 
+          for (i=2;i<=(max-2);i++) { lum_d[i] = (double)(lum_d[i-2] + lum_d[i-1] + lum_d[i] + lum_d[i+1] + lum_d[i+2])/5.;} 
+           for (i=2;i<=(max-2);i++) { lum_d[i] = (double)(lum_d[i-2] + lum_d[i-1] + lum_d[i] + lum_d[i+1] + lum_d[i+2])/5.;} 
+
+           /* TR START *
+          if (k == 2) for(int i=0;i<=max;i++)  fprintf(fp,"%d %3f \n",i,lum_d[i]); /* TR END */
+
+	   for(i=2;i<=max;i++) {if (lum_d[i] > maxx) {
+	                                               maxx = lum_d[i];
+	                                               vmaxx = (double)i;
+	     }
+	   } 
+
+	   // gausian noise //
+
+     /* TR START (removing output clutter) *
+	   cout<<vmaxx<<endl; /* TR END */
+
+	   //sigma_out = -0.001*vmaxx*vmaxx + 1.069*vmaxx - 2.213; // fit to polinomial degree 2
+
+	     sigma_out = 1.02*vmaxx + 8.5179; // fit to polinomial degree 1
+
+	   // speckle noise variance estimation //
+
+	     //sigma_out = max/10.; // for speckle noise 
+
+	    //cout<<vmaxx<<"\t"<<maxx<<"\t"<<sigma_out<<endl;
+
+	    delete [] edge; delete [] lum; delete [] lum_d;
+ 
+	   return sigma_out;
+
+}

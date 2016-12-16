@@ -1,0 +1,143 @@
+
+#include "riff.h"
+
+void tRIFF::addChunckList(tChunckList* const &cl) {
+  m_Elements.push_back(cl);
+}
+
+tRIFF::~tRIFF() {
+  vector<tChunckList*>::iterator i;
+
+  for(i=m_Elements.begin() ; i!=m_Elements.end() ; i++) 
+    delete (*i);
+
+//m_Elements.erase(m_Elements.begin(),m_Elements.end());
+}
+
+void tRIFF::Write(FILE* fp, uint* FileOffset) {
+
+  fprintf(fp,"RIFF");
+
+  int size=4; // 4 byte type descriptor
+
+  vector<tChunckList*>::iterator i;
+  for (i=m_Elements.begin() ; i!=m_Elements.end() ; i++) {
+    size+=(*i)->getSize();
+  }
+
+  size=_LE_CONVERSION(size);
+  fwrite(&size,4,1,fp);
+  fwrite(m_Type,4,1,fp);
+
+  for(i=m_Elements.begin() ; i!=m_Elements.end() ; i++) {
+    FileOffset = (*i)->write(fp, FileOffset);
+  }
+
+}
+  
+
+void tChunckList::addChunckList(tChunckList * const & cl) {
+  m_Elements.push_back(cl);
+}
+
+tChunck::tChunck(char const *chunckId, int chunckSize)
+  : tChunckList(chunckId),
+    m_Data(NULL)
+{
+  m_Size=chunckSize;
+//m_Data=new BYTE[m_Size];
+  m_Data = (BYTE *) malloc (m_Size * sizeof (BYTE));
+  m_Ptr=m_Data;
+}
+
+tChunck::tChunck(char const *chunckId, int chunckSize, BYTE *chunckData) 
+  : tChunckList(chunckId),
+    m_Data(NULL)
+{
+  m_Size=chunckSize;
+  if (chunckData)
+  {
+//        m_Data=new BYTE[m_Size];
+   m_Data = (BYTE *) malloc (m_Size * sizeof (BYTE));
+          memcpy(m_Data,chunckData,m_Size);
+  }
+}
+
+/*
+tChunck::tChunck(char *chunckId, tImage *imageData)
+  : tChunckList(chunckId),
+    m_Data(NULL),
+    m_Image(imageData)
+{
+  m_Size= (m_Image->GetWidth() + (m_Image->GetWidth()&1) ) 
+    * m_Image->GetHeight()
+    * 3;
+}
+*/
+
+tChunck::~tChunck() {
+  if (m_Data != NULL) {
+    //delete[] m_Data;
+    free (m_Data);
+} }
+
+int tChunck::getSize() {
+  int size=4+4+m_Size; // 4 byte identifier, 4 byte size, data
+  return size;
+}
+
+void tChunck::addToChunck(int size, BYTE *data)
+{
+  memcpy(m_Ptr,data,size);
+  m_Ptr+=size;
+  return;
+}
+
+uint* tChunck::write(FILE *fp, uint* FileOffset) {
+  fwrite(m_Id,4,1,fp);
+  int size2=_LE_CONVERSION(m_Size);
+  fwrite(&size2,4,1,fp);
+
+  if (m_Data != NULL)
+          fwrite(m_Data,m_Size,1,fp);
+  else
+  {     // frame data; to be written later on
+          *FileOffset++ = ftell(fp);    // remember file offset for raw data
+          fseek(fp, m_Size, SEEK_CUR);
+  }
+  return(FileOffset);
+}
+
+tList::~tList() {
+  vector<tChunckList*>::iterator i;
+
+  for(i=m_Elements.begin() ; i!=m_Elements.end() ; i++)
+    delete (*i);
+
+  //m_Elements.erase(m_Elements.begin(),m_Elements.end());
+}
+
+int tList::getSize() {
+  int size=4+4+4; // 4 byte `LIST', 4 byte size, 4 byte identifier
+
+  vector<tChunckList*>::iterator i;
+  for( i=m_Elements.begin() ; i!=m_Elements.end() ; i++)
+    size+=(*i)->getSize();
+
+  return size;
+}
+
+uint* tList::write(FILE *fp, uint* FileOffset) {
+  char const*list="LIST";
+  int size=getSize()-4-4;
+
+  fwrite(list,4,1,fp);
+  int size2=_LE_CONVERSION(size);
+  fwrite(&size2,4,1,fp);
+  fwrite(m_Id,4,1,fp);
+
+  vector<tChunckList*>::iterator i;
+  for( i=m_Elements.begin() ; i!=m_Elements.end() ; ++i)
+    FileOffset = (*i)->write(fp, FileOffset);
+  return(FileOffset);
+}

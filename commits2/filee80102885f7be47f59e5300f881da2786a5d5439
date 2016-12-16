@@ -1,0 +1,547 @@
+
+//#ifdef WIN32
+// MessageBox
+//#define WIN32_LEAN_AND_MEAN             // Exclude rarely-used stuff from Windows headers
+//#include <windows.h>
+//#endif
+
+#include "avi.h"
+//#include <memory.h>
+//#include <stdlib.h>
+//#include <string.h>
+#include <errno.h>
+
+const DWORD tAVI_RGB::FLAGS_CONTAIN_IDX=1<<4;      // AVI contains index chunck
+const DWORD tAVI_RGB::FLAGS_USE_IDX_FOR_ORDER=1<<5;// Use index chunck for frame order
+const DWORD tAVI_RGB::FLAGS_INTERLEAVED=1<<8;      // AVI is interleaved
+const DWORD tAVI_RGB::FLAGS_CAPTURE_OPTIMIZE=1<<16;// AVI is optimized for live video capture
+const DWORD tAVI_RGB::FLAGS_COPYRIGHTED=1<<17;     // AVI contains copyrighted data
+
+
+//==============================================================================
+// Helper functions for reading
+
+DWORD LE_DWORD (DWORD wi)
+{
+  DWORD wo;
+  wo  = ((uchar*)(&wi))[0];
+  wo |= ((uchar*)(&wi))[1] <<  8;
+  wo |= ((uchar*)(&wi))[2] << 16;
+  wo |= ((uchar*)(&wi))[3] << 24;
+  return wo;
+}
+
+static void expect (char const * buffer, char const * val)
+{
+  if (memcmp (buffer, val, strlen (val)) != 0) {
+    fprintf (stderr, "AVI_ERROR: expected `%s', found `%s'\n",
+                                          val,        buffer);
+    exit (EXIT_FAILURE);
+  }
+#ifdef DEBUG_AVI
+  else {
+    fprintf (stderr, "AVI_OK: expected+found `%s'\n", val);
+  }
+#endif
+}
+
+//------------------------------------------------------------------------------
+static void skip (FILE * fp, uint size)
+{
+  // pad to WORD boundary (2 bytes)
+  // size = size + size&1;
+  // skip bytes in file
+  for (uint i=0; i<size; i++) { fgetc (fp); }
+}
+
+
+
+tAVI_RGB::tAVI_RGB()
+{
+  // Default FPS (frame/second)
+  m_Fps=30;
+
+  // Default Flags
+  m_Flags=0;
+
+  // AVIHEADER
+  m_AVIh.MaximumDataRate=0;
+  m_AVIh.PaddingGranularity=0;
+  m_AVIh.NumberOfStreams=_LE_CONVERSION(1);
+  m_AVIh.NumberOfInitialFrames=0;
+  m_AVIh.TimeScale=_LE_CONVERSION(1);
+  m_AVIh.StartTime=0;
+
+  // AVISTREAMHEADER
+  strcpy(m_AVIsh.DataType,"vids");
+  strcpy(m_AVIsh.DataHandler,"rgb ");
+  m_AVIsh.Priority=0;
+  m_AVIsh.InitialFrames=0;
+  m_AVIsh.TimeScale=_LE_CONVERSION(1);
+  m_AVIsh.StartTime=0;
+  m_AVIsh.Quality=_LE_CONVERSION(~0);
+  m_AVIsh.SampleSize=0;
+
+  // AVIFORMATHEADER
+  m_AVIsf.NumberOfPlanes=_LE_CONVERSION((WORD)1);
+  m_AVIsf.BitCount=_LE_CONVERSION((WORD)24);
+  //  strcpy(m_AVIsf.Type,"RGB ");
+  memset(m_AVIsf.Type,0,4); /* Microsoft convention for RGB (see BITMAPINFO) */
+  m_AVIsf.XperMeter=0;
+  m_AVIsf.YperMeter=0;
+  m_AVIsf.ClrUsed=0;
+  m_AVIsf.ClrImportant=0;
+
+  m_File = NULL;
+  m_FileOffset = NULL;
+}
+
+void tAVI_RGB::close_file(void)
+{
+        if (m_File)
+        {
+                fclose(m_File);
+                m_File = NULL;
+        }
+        if (m_FileOffset)
+        {
+              //delete [] m_FileOffset;
+                free (m_FileOffset);
+                m_FileOffset = NULL;
+        }
+}
+
+tAVI_RGB::~tAVI_RGB()
+{
+        close_file();
+}
+
+void tAVI_RGB::Write(char const *fname, uint nframes, uint width, uint height)
+{
+  FILE* fp;
+  while ((fp=fopen(fname,"w+b")) == NULL)
+  {     // GAG - give user the possibility to retry
+          char buf[256];
+          sprintf(buf, "%s: %s", fname, strerror(errno));
+//#ifdef WIN32
+//          switch (MessageBox(0, buf, 0, MB_ABORTRETRYIGNORE)) {
+//          case IDABORT:
+//                  exit(-1);
+//          case IDIGNORE:
+//                  return;
+//          }
+//#else
+        //CERR<<buf<<"\nAbort, Retry, Ignore? "<<flush;
+          fprintf(stderr, "%s\nAbort, Retry, Ignore?\n", buf);
+          int choice;
+        //cin >> choice;
+          fscanf(stdin, "%d", &choice);
+          switch (choice) {
+          case 'A':
+          case 'a':
+                  exit(-1);
+          case 'I':
+          case 'i':
+                  return;
+          default: 
+                  exit(-1);
+          }
+//#endif
+  }
+  close_file();
+  m_File = fp;
+//m_FileOffset = new uint[nframes];
+  m_FileOffset = (uint *) malloc (nframes * sizeof (uint));
+  for (uint i=0; i<nframes; i++) m_FileOffset[i]=0;
+  if (!IsIndex()) ToggleIndex();
+  CreateRIFF(nframes, width, height);
+  m_RIFF->Write(fp, m_FileOffset);
+  DestroyRIFF();
+}
+
+void AVI_ERROR ()
+{
+  fprintf (stderr, "AVI_ERROR\n");
+}
+
+void tAVI_RGB::Read(char const *fname)
+{
+  close_file();
+  FILE* fp = fopen(fname,"rb");
+  if (fp==NULL) {
+  //CERR<<"Could not open `"<<fname<<"'"<<endl;
+    fprintf(stderr, "Could not open `%s'\n", fname);
+    return;
+  }
+  
+  char buffer[128];
+  int  size;
+
+  int  nframes;
+  int  width;
+  int  height;
+
+  fread(buffer,4,1,fp); // RIFF header
+  if (memcmp(buffer,"RIFF",4)!=0){
+  //CERR<<"RIFF expected at "<<ftell(fp)<<'\n'
+  //    <<"[got: `"<<buffer[0]<<buffer[1]<<buffer[2]<<buffer[3]<<"']"<<endl;
+    AVI_ERROR();
+    fclose(fp);
+    return;
+  }
+  fread(buffer,4,1,fp); // size
+  fread(buffer,4,1,fp); // type (AVI)
+  fread(buffer,4,1,fp); // LIST
+  if (memcmp(buffer,"LIST",4)!=0) {
+  //CERR<<"LISTHEADERCHUNCK expected at "<<ftell(fp)<<'\n'
+  //    <<"[got: `"<<buffer[0]<<buffer[1]<<buffer[2]<<buffer[3]<<"']"<<endl;
+    AVI_ERROR();
+    fclose(fp);
+    return;
+  }
+  fread(buffer,4,1,fp); // size (LISTHEADERCHUNCK)
+  fread(buffer,4,1,fp); // type (LISTHEADERCHUNCK)
+  if (memcmp(buffer,"hdrl",4)!=0) {
+  //CERR<<"LISTHEADERCHUNCK (hdrl) expected at "<<ftell(fp)<<endl;
+    AVI_ERROR();
+    fclose(fp);
+    return;
+  }
+
+  fread(buffer,4,1,fp); // chunck (AVIHEADER)
+  if (memcmp(buffer,"avih",4)!=0) {
+  //CERR<<"AVIHEADER (avih) expected at "<<ftell(fp)<<endl;
+    AVI_ERROR();
+    fclose(fp);
+    return;
+  }
+  fread(&size,sizeof(size),1,fp); 
+  size   =_LE_CONVERSION(size);
+  if (size!=sizeof(m_AVIh)) {
+  //CERR<<"AVIHEADER not "<<sizeof(m_AVIh)<<" bytes"<<endl;
+    AVI_ERROR();
+    fclose(fp);
+    return;
+  }
+  fread(&m_AVIh,size,1,fp);
+  m_Fps  =1000000/_LE_CONVERSION(m_AVIh.TimeBetweenFrames);
+  nframes=_LE_CONVERSION(m_AVIh.TotalNumberOfFrames);
+  m_Flags=m_AVIh.Flags;
+  width  =_LE_CONVERSION(m_AVIh.Width);
+  height =_LE_CONVERSION(m_AVIh.Height);
+
+  fread(buffer,4,1,fp); // list (LISTHEADERCHUNCK2)
+  if (memcmp(buffer,"LIST",4)!=0) {
+  //CERR<<"LISTHEADERCHUNCK2 expected at "<<ftell(fp)<<endl;
+    AVI_ERROR();
+    fclose(fp);
+    return;
+  }
+  fread(&size,sizeof(size),1,fp);
+  fread(buffer,4,1,fp);
+  if (memcmp(buffer,"strl",4)!=0) {
+  //CERR<<"LISTHEADERCHUNCK2 (strl) expected at "<<ftell(fp)<<endl;
+    AVI_ERROR();
+    fclose(fp);
+    return;
+  }
+  fread(buffer,4,1,fp); // chunck (AVISTREAMHEADER)
+  if (memcmp(buffer,"strh",4)!=0) {
+  //CERR<<"AVISTREAMHEADER (strh) expected at "<<ftell(fp)<<endl;
+    AVI_ERROR();
+    fclose(fp);
+    return;
+  }
+  fread(&size,sizeof(size),1,fp);
+  size=_LE_CONVERSION(size);
+  if (size!=sizeof(m_AVIsh)) {
+  //CERR<<"AVISTREAMHEADER not "<<sizeof(m_AVIsh)<<" bytes"<<endl;
+    AVI_ERROR();
+    fclose(fp);
+    return;
+  }
+  fread(&m_AVIsh,size,1,fp);
+  fread(buffer,4,1,fp); // chunck (AVISTREAMFORMAT)
+  if (memcmp(buffer,"strf",4)!=0) {
+  //CERR<<"AVISTREAMFORMAT (strf) expected at "<<ftell(fp)<<endl;
+    AVI_ERROR();
+    fclose(fp);
+    return;
+  }
+  fread(&size,sizeof(size),1,fp);
+  size=_LE_CONVERSION(size);
+  if (size < (int)sizeof(m_AVIsf)) {
+  //CERR<<"AVISTREAMFORMAT not "<<sizeof(m_AVIsf)
+  //    <<" but "<<size<< " bytes"<<endl;
+    printf ("AVISTREAMFORMAT not %ld but %d bytes\n", sizeof(m_AVIsf), size);
+    AVI_ERROR();
+    fclose(fp);
+    return;
+  }
+  fread(&m_AVIsf,sizeof(m_AVIsf),1,fp);
+
+  // skip Colors[...]
+  for (int i=0; i<size-(int)sizeof(m_AVIsf); i++) {
+    fgetc (fp);
+  }
+
+  if (memcmp(m_AVIsf.Type,"RGB ",4)!=0 &&
+      memcmp(m_AVIsf.Type,"\0\0\0\0",4)!=0) {
+  //CERR<<"AVISTREAMFORMAT: type not `RGB '"<<endl;
+    AVI_ERROR();
+    fclose(fp);
+    return;
+  }
+#if 0
+  fread(buffer,4,1,fp); // chunck (AVISTREAMNAME)
+  if (memcmp(buffer,"strn",4)==0) {
+    fread(&size,sizeof(size),1,fp);
+    size=_LE_CONVERSION(size)+1;
+        fseek(fp, size, SEEK_CUR);
+    fread(buffer,4,1,fp);
+  }
+
+  if (memcmp(buffer,"JUNK",4)==0) {
+    printf ("found \"JUNK\" (1) in stream\n");
+    fread(&size,sizeof(size),1,fp);
+    size=_LE_CONVERSION(size);
+        fseek(fp, size, SEEK_CUR);
+    fread(buffer,4,1,fp);
+  }
+//*
+  if (memcmp(buffer,"LIST",4)==0) {
+    printf ("found \"LIST\" (2) in stream\n");
+    fread(&size,sizeof(size),1,fp);
+    size=_LE_CONVERSION(size);
+    fseek(fp, size, SEEK_CUR);
+    fread(buffer,4,1,fp);
+  }
+  if (memcmp(buffer,"JUNK",4)==0) {
+    printf ("found \"JUNK\" (3) in stream\n");
+    fread(&size,sizeof(size),1,fp);
+    size=_LE_CONVERSION(size);
+    fseek(fp, size, SEEK_CUR);
+    fread(buffer,4,1,fp);
+  }
+//*/
+  // LISTMOVIECHUNCK
+  if (memcmp(buffer,"LIST",4)!=0) {
+  //CERR<<"LISTMOVIECHUNCK expected at "<<ftell(fp)<<endl;
+    printf ("found \"LIST\" (4) in stream\n");
+    AVI_ERROR();
+    fclose(fp);
+    return;
+  }
+  fread(&size,sizeof(size),1,fp);
+  size=_LE_CONVERSION(size);
+  fread(buffer,4,1,fp);
+#else
+  //-- skip optional stream header data until:  'LIST' size 'movi'
+  while (1) {
+    fread (buffer,4,1,fp);
+    if (memcmp(buffer,"LIST",4)!=0)
+    {
+      // throw away JUNK
+      fread (&size ,4,1,fp);
+      skip  (fp, LE_DWORD  (size));
+    }
+    else 
+    {
+      fread  (&size ,4,1,fp);                  // size
+      size   = LE_DWORD  (size);
+      fread  (buffer,4,1,fp);                  // type 'movi'
+      if (memcmp(buffer,"movi",4)==0)
+      {
+        // found    'LIST' size 'movi'
+        break;
+      }
+      else
+      {
+        // found other 'LIST' -> throw away
+        skip  (fp, LE_DWORD  (size) - 4);      // type of 4 bytes already read
+      }
+    }
+  }
+
+  //-- LIST ( 'movi' ... )
+/*
+  expect (buffer,"LIST");                  // 'LIST'
+  fread  (&size ,4,1,fp);                  // size
+  size   = LE_DWORD  (size);
+  fread  (buffer,4,1,fp);                  // type 'movi'
+*/
+  expect (buffer,"movi");
+
+#endif
+  if (memcmp(buffer,"movi",4)!=0) {
+  //CERR<<"LISTMOVIECHUNCK (movi) expected at "<<ftell(fp)<<endl;
+    AVI_ERROR();
+    fclose(fp);
+    return;
+  }
+
+//unsigned* FileOffset = new uint[nframes];
+  unsigned* FileOffset = (uint *) malloc (nframes * sizeof (uint));
+  for (int i=0; i<nframes; i++) FileOffset[i]=0;
+
+  int sz = (width + (width&1) ) * height * 3;
+
+//BYTE *bytes = new BYTE[sz];
+
+  for(int i=0;i<nframes;++i)
+  {
+        fread(buffer,4,1,fp); // chunck (frame)
+    if (memcmp(buffer,"00db",4)!=0) {
+    //CERR<<"CHUNCK (00db) expected at "<<ftell(fp)<<endl;
+          delete FileOffset;
+    AVI_ERROR();
+      fclose(fp);
+      return;
+    }
+    fread(&size,sizeof(size),1,fp);
+    size=_LE_CONVERSION(size);
+
+    if (size!=sz) {
+    //CERR<<sz<<" bytes expected at CHUNCK (00db) instead of "<<size<<endl;
+          delete FileOffset;
+    AVI_ERROR();
+      fclose(fp);
+      return;
+    }
+
+        FileOffset[i] = ftell(fp);
+        fseek(fp, sz, SEEK_CUR);
+  }
+  // all went well; keep file open for reading frame data
+  m_File = fp;
+  m_FileOffset = FileOffset;
+}
+
+tFrame* tAVI_RGB::ReadFrame(uint frame_nr, tFrame* buffer)
+{
+        tFrame* frame;
+
+        if (buffer)
+                frame = buffer;
+        else
+                frame = new tFrame(GetWidth(), GetHeight());
+
+        if (m_File && m_FileOffset && frame_nr < GetNumberOfFrames())
+        {
+                fseek(m_File, m_FileOffset[frame_nr], SEEK_SET);
+                frame->Read(m_File);
+        }
+        else
+                frame->Clear();
+        return(frame);
+}
+
+void tAVI_RGB::WriteFrame(uint frame_nr, tFrame* buffer)
+{
+        if (m_File && m_FileOffset && frame_nr < GetNumberOfFrames())
+        {
+                fseek(m_File, m_FileOffset[frame_nr], SEEK_SET);
+                buffer->Write(m_File);
+        }
+}
+
+uint tAVI_RGB::GetWidth()
+{
+        return(_LE_CONVERSION(m_AVIh.Width));
+}
+
+uint tAVI_RGB::GetHeight()
+{
+        return(_LE_CONVERSION(m_AVIh.Height));
+}
+
+uint tAVI_RGB::GetNumberOfFrames()
+{
+        return(_LE_CONVERSION(m_AVIh.TotalNumberOfFrames));
+}
+
+void tAVI_RGB::DestroyRIFF()
+{
+  delete m_RIFF;
+}
+
+// Build AVI-RIFF tree in memory
+void tAVI_RGB::CreateRIFF(uint nframes, uint width, uint height)
+{
+  uint i;
+
+  m_RIFF=new tRIFF("AVI ");
+
+  // make LISTHEADERCHUNCK (1)
+  tList *LISTHEADERCHUNCK=new tList("hdrl");
+  m_RIFF->addChunckList(LISTHEADERCHUNCK);
+
+  // make AVIHEADER (1.1)
+  m_AVIh.TimeBetweenFrames=_LE_CONVERSION(1000000/m_Fps);
+  m_AVIh.TotalNumberOfFrames=_LE_CONVERSION(nframes);
+  m_AVIh.Flags=m_Flags;
+  m_AVIh.Width=_LE_CONVERSION(width);
+  m_AVIh.Height=_LE_CONVERSION(height);
+  m_AVIh.SuggestedBufferSize=_LE_CONVERSION(3*(width+(width&1))*height);
+  m_AVIh.DataRate=_LE_CONVERSION(m_Fps);
+  m_AVIh.DataLength=_LE_CONVERSION(m_Fps*nframes);
+  
+  tChunck *AVIHEADER=new tChunck("avih",sizeof(m_AVIh),(BYTE *)&m_AVIh);
+  LISTHEADERCHUNCK->addChunckList(AVIHEADER);
+
+  // make LISTHEADERCHUNCK2 (1.2)
+  tList *LISTHEADERCHUNCK2=new tList("strl");
+  LISTHEADERCHUNCK->addChunckList(LISTHEADERCHUNCK2);
+  
+  // make AVISTREAMHEADER (1.2.1)
+  m_AVIsh.Flags=0;
+  m_AVIsh.DataRate=_LE_CONVERSION(m_Fps*m_Fps);
+  m_AVIsh.DataLength=_LE_CONVERSION(nframes);
+  m_AVIsh.TimeScale=_LE_CONVERSION(m_Fps);
+  m_AVIsh.SuggestedBufferSize=_LE_CONVERSION(3*(width+(width&1))*height);
+  m_AVIsh.Rectangle.top=0;
+  m_AVIsh.Rectangle.left=0;
+  m_AVIsh.Rectangle.right=_LE_CONVERSION(width);
+  m_AVIsh.Rectangle.bottom=_LE_CONVERSION(height);
+
+  tChunck *AVISTREAMHEADER=new tChunck("strh",sizeof(m_AVIsh),(BYTE *)&m_AVIsh);
+  LISTHEADERCHUNCK2->addChunckList(AVISTREAMHEADER);
+
+  // make AVISTREAMFORMAT (1.2.2)
+  m_AVIsf.FormatLength=_LE_CONVERSION(sizeof(m_AVIsf)-sizeof(m_AVIsf.FormatLength));
+  // m_AVIsf.FormatLength=_LE_CONVERSION(sizeof(m_AVIsf));
+  m_AVIsf.Width=_LE_CONVERSION(width);
+  m_AVIsf.Height=_LE_CONVERSION(height);
+  m_AVIsf.PlaneSize=_LE_CONVERSION(3*(width+(width&1))*height);
+
+  tChunck *AVISTREAMFORMAT=new tChunck("strf",sizeof(m_AVIsf),(BYTE *)&m_AVIsf);
+  LISTHEADERCHUNCK2->addChunckList(AVISTREAMFORMAT);
+
+  tList *LISTMOVIECHUNCK=new tList("movi");
+  m_RIFF->addChunckList(LISTMOVIECHUNCK);
+
+  tChunck *frame = 0;
+  int framedata_size = (width + (width & 1)) * height * 3;
+  for(i=0;i<nframes;++i) {
+    frame=new tChunck("00db", framedata_size, (BYTE*)NULL);
+    LISTMOVIECHUNCK->addChunckList(frame);
+  }
+  long frame_size=frame->getSize();
+
+  tChunck *AVIINDEX=new tChunck("idx1",sizeof(m_AVIid)*nframes);
+  m_AVIid.Identifier[0]='0';
+  m_AVIid.Identifier[1]='0';
+  m_AVIid.Identifier[2]='d';
+  m_AVIid.Identifier[3]='b';
+  m_AVIid.Flags=16;
+  m_AVIid.Length=_LE_CONVERSION(frame_size-8); 
+  
+  for(i=0;i<nframes;++i) {
+    m_AVIid.Offset=_LE_CONVERSION(4+i*frame_size);
+    AVIINDEX->addToChunck(sizeof(m_AVIid),(BYTE *)&m_AVIid); 
+    m_AVIid.Identifier[3]='c';
+    m_AVIid.Flags=0;
+  } 
+  m_RIFF->addChunckList(AVIINDEX);
+}
+

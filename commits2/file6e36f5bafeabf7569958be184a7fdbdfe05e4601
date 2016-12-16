@@ -1,0 +1,123 @@
+// File >>> frame.cc
+//
+//------------------------------------------------------------------------------
+
+//#include <assert.h>
+#include "frame.h"
+
+//==============================================================================
+tFrame::~tFrame ()
+{
+//delete [] m_data;
+  free (m_data);
+}
+
+//------------------------------------------------------------------------------
+tFrame::tFrame (uint width, uint height)
+{
+  m_width  = width;
+  m_height = height;
+//m_data   = new uint [width * height];
+  m_data   = (uint *) malloc (width * height * sizeof (uint));
+  Clear ();
+}
+
+//------------------------------------------------------------------------------
+void tFrame::Clear ()
+{
+  for (uint i=0; i < m_width * m_height; i++) {
+    m_data[i] = 0;
+  }
+}
+
+//------------------------------------------------------------------------------
+static void check (uint w, uint h, uint x, uint y, uint component, uint val)
+{
+  assert (x < w);
+  assert (y < h);
+  assert (component < 3);
+  assert (val < (1<<24));
+}
+
+//------------------------------------------------------------------------------
+uchar tFrame::GetComponent (uint x, uint y, uint component)
+{
+  check (m_width, m_height, x, y, component, 0);
+  uint val = m_data [y * m_width + x] >> (component * 8);
+  return (uchar) val;
+}
+
+//------------------------------------------------------------------------------
+void tFrame::PutComponent (uint x, uint y, uint component, uchar val)
+{
+  check (m_width, m_height, x, y, component, 0);
+  uint pixval = m_data [y * m_width + x];
+  pixval &= ~(0xFF << (component * 8));    // clear old component value
+  pixval |=   val  << (component * 8);     // set   new component value
+  m_data [y * m_width + x] = pixval;
+}
+
+//------------------------------------------------------------------------------
+uint tFrame::GetPixel (uint x, uint y)
+{
+  check (m_width, m_height, x, y, 0, 0);
+  uint val = m_data [y * m_width + x];
+  return val;
+}
+
+//------------------------------------------------------------------------------
+void tFrame::PutPixel (uint x, uint y, uint val)
+{
+  check (m_width, m_height, x, y, 0, val);
+  m_data[y * m_width + x] = val;
+}
+
+//------------------------------------------------------------------------------
+void tFrame::PutMonoPixel (uint x, uint y, uchar val)
+{
+  check (m_width, m_height, x, y, 0, val);
+  m_data[y * m_width + x] = val * 0x010101;
+}
+
+//------------------------------------------------------------------------------
+void tFrame::Read (FILE * fp)
+{
+  Clear();        // set MSBs to zero
+  uint * data = m_data + (m_height-1) * m_width;  // last line
+  for (int y = m_height; y; --y)
+  {
+    for (int x = m_width; x; --x)
+    {
+      fread (data, 3, 1, fp);
+      *data = _LE_CONVERSION (*data);
+      ++data;
+    }
+    if (m_width & 1) {      // odd width
+      //fseek (fp, 1, SEEK_CUR);
+      fgetc (fp);
+    }
+    data -= 2 * m_width;    // previous line
+  }
+}
+
+//------------------------------------------------------------------------------
+void tFrame::Write (FILE * fp)
+{
+  uint * data = m_data + (m_height-1) * m_width;  // last line
+  for (int y = m_height; y; --y)
+  {
+    for (int x = m_width; x; --x)
+    {
+      unsigned d = _LE_CONVERSION (*data);
+      fwrite (&d, 3, 1, fp);
+      ++data;
+    }
+    if (m_width & 1) {      // odd width
+      //fseek (fp, 1, SEEK_CUR);
+      fputc (0, fp);
+    }
+    data -= 2 * m_width;    // previous line
+  }
+}
+
+//==============================================================================

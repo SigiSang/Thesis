@@ -1,0 +1,54 @@
+// File >>> frame.h
+//
+//------------------------------------------------------------------------------
+
+#ifndef _frame_h_
+#define _frame_h_
+
+#include <stdio.h>
+#include "defsg.h"
+
+//==============================================================================
+
+class tFrame
+{
+    // private copy constructor and assignment operator
+    tFrame (tFrame const &);
+    tFrame & operator = (tFrame const &);
+
+  public:
+
+    // Destruct frame data
+    ~tFrame ();
+
+    // Construct frame of width*height (black) pixels
+    tFrame (uint width, uint height);
+
+    // Initialize pixels to all black (value == 0)
+    void Clear ();
+
+    // Read/write frame data from/to .avi file
+    void Read  (FILE * fd);
+    void Write (FILE * fd);
+
+    // get/put pixel values
+    // - a pixel has 3 components: R G B (each within range 0..255)
+    //   R = component 0; G = component 1; B = component 2
+    // - a monochrome pixel has 3 identical R G B values
+
+    uchar GetComponent (uint x, uint y, uint component);
+    void  PutComponent (uint x, uint y, uint component, uchar val);
+    uint  GetPixel     (uint x, uint y);
+    void  PutPixel     (uint x, uint y,                 uint  val);
+    void  PutMonoPixel (uint x, uint y,                 uchar val);
+
+  private:
+
+    uint   m_width ; // frame width
+    uint   m_height; // frame height
+    uint * m_data  ; // pixel data
+};
+
+//==============================================================================
+
+#endif /* _frame_h_ */

@@ -1,0 +1,279 @@
+
+#include "metools.h"
+
+void WriteArrayToFrame(int *p,tFrame *frame_inh,int width,int height){
+
+  for(int n=0;n<height;n++)
+    for(int m=0;m<width;m++){
+
+      for(int c=0;c<3;c++) frame_inh->PutComponent(m,n,c,(int)_ROUND(p[n*width+m]));
+    }
+}
+
+/* TR START */
+void WriteFrameToMat(tFrame *frame_in,cv::Mat *mat_out, int width, int height){
+  *mat_out = cv::Mat(width,height,CV_32F);
+  for(int x=0;x<width;x++){
+    for(int y=0;y<height;y++){
+      if(x<10 && y<10){
+        cout<<(uint)frame_in->GetPixel(x,y)<<",";
+      }
+      mat_out->at<float>(y,x) = (float)frame_in->GetPixel(x,y);
+    }
+    cout<<endl;
+  }
+}
+/* TR END */
+
+void PutMotionVectorsInFrame(tFrame* motion_vector, V2D* D, int width, int height){
+
+  int MV;
+  int NX = width/BS;
+  int NY = height/BS;
+  int s;
+  int MVC;
+
+  for(int n=3;n<height;n+=BS)
+    for(int m=3;m<width;m+=BS){
+
+      s = NX*(n/BS)+(m/BS); 
+
+      MV = (int)_ROUND(D[s].x*D[s].x+D[s].y*D[s].y);
+
+      if (MV>255)   MV = 255;
+
+      if(MV>THRESH) {   MVC = 255;
+
+      if(MV>150) MV = 255;
+      else       MV = 125;
+                                
+      motion_vector->PutComponent(m,n,2,MVC);motion_vector->PutComponent(m,n,1,0);motion_vector->PutComponent(m,n,0,0);
+      motion_vector->PutComponent(m+1,n,2,MVC);motion_vector->PutComponent(m+1,n,1,0);motion_vector->PutComponent(m+1,n,0,0);
+      motion_vector->PutComponent(m,n+1,2,MVC);motion_vector->PutComponent(m,n+1,1,0);motion_vector->PutComponent(m,n+1,0,0);
+      motion_vector->PutComponent(m+1,n+1,2,MVC);motion_vector->PutComponent(m+1,n+1,1,0);motion_vector->PutComponent(m+1,n+1,0,0);
+         
+	    if((D[s].x>0)&&(D[s].y<0))   {
+
+      motion_vector->PutComponent(m-1,n+2,1,MV);motion_vector->PutComponent(m-1,n+2,0,0);motion_vector->PutComponent(m-1,n+2,2,0);
+      motion_vector->PutComponent(m-2,n+3,1,MV);motion_vector->PutComponent(m-2,n+3,0,0);motion_vector->PutComponent(m-2,n+3,2,0);
+
+	    }
+	    
+            if((D[s].x>0)&&(D[s].y>0))   {
+      motion_vector->PutComponent(m-1,n-1,1,MV);motion_vector->PutComponent(m-1,n-1,0,0);motion_vector->PutComponent(m-1,n-1,2,0);
+      motion_vector->PutComponent(m-2,n-2,1,MV);motion_vector->PutComponent(m-2,n-2,0,0);motion_vector->PutComponent(m-2,n-2,2,0);
+	    }
+
+            if((D[s].x>0)&&(D[s].y==0))  { 
+      motion_vector->PutComponent(m-1,n  ,1,MV);motion_vector->PutComponent(m-1,n  ,0,0);motion_vector->PutComponent(m-1,n  ,2,0);
+      motion_vector->PutComponent(m-2,n  ,1,MV);motion_vector->PutComponent(m-2,n  ,0,0);motion_vector->PutComponent(m-2,n  ,2,0);
+      motion_vector->PutComponent(m-1,n+1,1,MV);motion_vector->PutComponent(m-1,n+1,0,0);motion_vector->PutComponent(m-1,n+1,2,0);
+      motion_vector->PutComponent(m-2,n+1,1,MV);motion_vector->PutComponent(m-2,n+1,0,0);motion_vector->PutComponent(m-2,n+1,2,0);
+	    }
+
+	    if((D[s].x<0)&&(D[s].y>0))   { 
+      motion_vector->PutComponent(m+2,n-1,1,MV);motion_vector->PutComponent(m+2,n-1,0,0);motion_vector->PutComponent(m+2,n-1,2,0);
+      motion_vector->PutComponent(m+3,n-2,1,MV);motion_vector->PutComponent(m+3,n-2,0,0);motion_vector->PutComponent(m+3,n-2,2,0);
+	    }
+
+            if((D[s].x<0)&&(D[s].y<0))   { 
+      motion_vector->PutComponent(m+2,n+2,1,MV);motion_vector->PutComponent(m+2,n+2,0,0);motion_vector->PutComponent(m+2,n+2,2,0);
+      motion_vector->PutComponent(m+3,n+3,1,MV);motion_vector->PutComponent(m+3,n+3,0,0);motion_vector->PutComponent(m+3,n+3,2,0);
+	    }
+
+	    if((D[s].x<0)&&(D[s].y==0))  { 
+      motion_vector->PutComponent(m+2,n  ,1,MV);motion_vector->PutComponent(m+2,n  ,0,0);motion_vector->PutComponent(m+2,n  ,2,0);
+      motion_vector->PutComponent(m+3,n  ,1,MV);motion_vector->PutComponent(m+3,n  ,0,0);motion_vector->PutComponent(m+3,n  ,2,0);
+      motion_vector->PutComponent(m+2,n+1,1,MV);motion_vector->PutComponent(m+2,n+1,0,0);motion_vector->PutComponent(m+2,n+1,2,0);
+      motion_vector->PutComponent(m+3,n+1,1,MV);motion_vector->PutComponent(m+3,n+1,0,0);motion_vector->PutComponent(m+3,n+1,2,0);
+	    }
+
+            if((D[s].x==0)&&(D[s].y>0))  {
+      motion_vector->PutComponent(m  ,n-1,1,MV);motion_vector->PutComponent(m  ,n-1,0,0);motion_vector->PutComponent(m  ,n-1,2,0);
+      motion_vector->PutComponent(m  ,n-2,1,MV);motion_vector->PutComponent(m  ,n-2,0,0);motion_vector->PutComponent(m  ,n-2,2,0); 
+      motion_vector->PutComponent(m+1,n-1,1,MV);motion_vector->PutComponent(m+1,n-1,0,0);motion_vector->PutComponent(m+1,n-1,2,0);
+      motion_vector->PutComponent(m+1,n-2,1,MV);motion_vector->PutComponent(m+1,n-2,0,0);motion_vector->PutComponent(m+1,n-2,2,0);
+	    }
+
+	    if((D[s].x==0)&&(D[s].y<0))  {
+      motion_vector->PutComponent(m  ,n+2,1,MV);motion_vector->PutComponent(m  ,n+2,0,0);motion_vector->PutComponent(m  ,n+2,2,0);
+      motion_vector->PutComponent(m  ,n+3,1,MV);motion_vector->PutComponent(m  ,n+3,0,0);motion_vector->PutComponent(m  ,n+3,2,0);
+      motion_vector->PutComponent(m+1,n+2,1,MV);motion_vector->PutComponent(m+1,n+2,0,0);motion_vector->PutComponent(m+1,n+2,2,0);
+      motion_vector->PutComponent(m+1,n+3,1,MV);motion_vector->PutComponent(m+1,n+3,0,0);motion_vector->PutComponent(m+1,n+3,2,0);
+	    }
+      }//if
+    }//for
+}
+
+void GetADRed(tFrame* image,double *D,int NX, int NY,int RAMAD){
+  
+  int WH = NX*NY;
+  int lum;
+
+  for(int m=0;m<NX;m++)
+    for(int n=0;n<NY;n++) {
+                              lum = (int)_ROUND(D[n*NX+m]);
+                              if(lum>255) lum = 255;
+                              if(lum<0) lum = 0; 
+
+                     if(lum>7*RAMAD) for(int c=0;c<3;c++) image->PutComponent(m,n,c,lum); 
+
+    }
+}
+
+void NormalFrameResolution(tFrame* frame_in,int w,int h,int *p){                
+ 
+  int lum; // current position luminance, luminance-right positioned
+  int   n,m,i;
+
+        for(n=0;n<h;n++)	            
+	    for(m=0;m<w;m++){
+			lum = frame_in->GetComponent(m,n,0);
+			p[n*w+m] = lum;
+		}//m,
+
+
+}
+
+void CopyFrame(tFrame* in_frame,tFrame* out_frame,int w,int h){
+
+
+     	for (int n=0;n<h;n++)
+         for (int m=0;m<w;m++) {
+
+	   for(int c=0;c<3;c++) out_frame->PutComponent(m,n,c,(int)_ROUND(0.299*in_frame->GetComponent(m,n,2) + 0.587*in_frame->GetComponent(m,n,1) + 0.114*in_frame->GetComponent(m,n,0)));
+
+	 }
+}
+
+void PutAmplitudeOfTheMotion(tFrame* motion_vector, V2D* D, int width, int height){
+
+  int MVA;   // motion vector ampltude
+  int NX = width/BS;
+  int NY = height/BS;
+  int s;
+
+  for(int n=0;n<height;n+=BS)
+    for(int m=0;m<width;m+=BS){
+
+      s = NX*(n/BS)+(m/BS);   // the number of the block motion
+
+      MVA = (int)_ROUND(D[s].x*D[s].x+D[s].y*D[s].y);  // the amplitude of the vector
+
+      if (MVA>255)   MVA = 255;
+
+      for(int i=0;i<BS;i++)
+	for(int j=0;j<BS;j++){
+
+                                 motion_vector->PutComponent(m+i,n+j,2,MVA);  
+	}//i,j
+    }//m,n
+}
+
+void PutRAM(tFrame* motion_vector, double* RAM, int width, int height){
+
+  int MVA;   // motion vector ampltude
+  int NX = width/BS;
+  int NY = height/BS;
+  int s;
+
+  for(int n=0;n<height;n+=BS)
+    for(int m=0;m<width;m+=BS){
+
+      s = NX*(n/BS)+(m/BS);   // the number of the block motion
+
+      MVA = (int)_ROUND(RAM[s]*2.);  // the amplitude of the vector
+
+      if (MVA>255)   MVA = 255;
+
+      for(int i=0;i<BS;i++)
+	for(int j=0;j<BS;j++){
+
+                                 motion_vector->PutComponent(m+i,n+j,0,MVA);  
+	}//i,j
+    }//m,n
+}
+
+void ErrorSequence(tFrame* error_frame, tFrame* frame_original, tFrame* frame_in, int width, int height){
+
+  int absdiff,K=2;
+
+      for(int n=0;n<height;n++)
+        for(int m=0;m<width;m++){
+
+	  absdiff = 10*abs(frame_original->GetComponent(m,n,0)-frame_in->GetComponent(m,n,0));
+          if(absdiff>255) absdiff=255;
+
+	  error_frame->PutComponent(m,n,2,absdiff);
+	}//m,n
+
+}
+
+void FrameToFrame(int *x,int *y,int M,int N){
+
+  for(int j=0;j<M*N;j++)   y[j] = x[j];
+
+}
+
+double RAM_statistics(double *RAM,int NX,int NY,FILE *fp_ram,int t){
+
+  int *ram = new int[NX*NY];
+  int ram_max = 0;
+  int s;
+  double lambda;
+  double sum_RAM = 0.;
+  int sum_hist = 0;
+
+     for(int n=0;n<NY;n++)
+        for(int m=0;m<NX;m++){  
+	                         s = m+n*NX;
+                                 sum_RAM += RAM[s];
+				 ram[s] = (int)_ROUND(RAM[s]);
+				 if(ram_max<ram[s]) ram_max = ram[s];
+                                 
+	}
+
+     lambda = sum_RAM/(double)(NX*NY);
+
+     //cout<<"RAM_MAX = "<<ram_max<<endl;
+
+     int *hist = new int[ram_max+1];
+     double *hist_D = new double[ram_max+1];     
+
+     for(int i=0;i<=ram_max;i++) hist[i] = 0;
+
+         for(int n=0;n<NY;n++)
+           for(int m=0;m<NX;m++){  
+	                         s = m+n*NX;
+                                 hist[ram[s]]++;                                  
+	}
+
+	 for(int i=0;i<=ram_max;i++) hist_D[i]  = (double)(hist[i])/(double)(NX*NY);
+
+	 //cout<<hist_D[7]<<endl;
+
+	 if(t==13) for(int i=0;i<=ram_max;i++)  fprintf(fp_ram,"%d %3f \n",i,hist_D[i]);
+
+      delete [] hist; delete [] ram; delete [] hist_D;
+
+      return lambda;
+
+}
+
+double VAR_PIC(double *X,int width,int height,int t){
+
+  int s;
+  double var = 0.;
+  double sum = 0.;
+
+        for(s=0;s<(height*width);s++)  sum += (double)X[s];
+
+           sum /= (width*height);
+
+	   for(s=0;s<(width*height);s++) var += ((double)X[s]-sum)*((double)X[s]-sum);
+
+	 var = sqrt(var/(width*height));
+
+     return var;
+}
+

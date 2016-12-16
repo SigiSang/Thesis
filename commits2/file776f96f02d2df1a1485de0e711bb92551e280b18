@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 2.8)
+project( mcwf )
+find_package( OpenCV REQUIRED )
+file(GLOB SOURCES ./*.cc ./*.cpp)
+add_executable( mcwf ${SOURCES} )
+target_link_libraries( mcwf ${OpenCV_LIBS})
