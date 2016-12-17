@@ -28,8 +28,8 @@ int main (int argc, char** argv){
 	/* Motion detection configuration */
 	ds::Dataset dataset;
 	// const int VID_ID = ds::CD_STREETCORNER , skipToFrame = 865;
-	const int VID_ID = ds::CD_TRAMSTATION, skipToFrame = 30;
-	// const int VID_ID = ds::CD_TRAMSTATION, skipToFrame = 590;
+	// const int VID_ID = ds::CD_TRAMSTATION, skipToFrame = 30;
+	const int VID_ID = ds::CD_TRAMSTATION, skipToFrame = 590;
 	// const int VID_ID = ds::AVSS_SHORT, skipToFrame = 0;
 	// const int VID_ID = ds::MISC_3, skipToFrame = 200;
 	// const int VID_ID = ds::MISC_test2, skipToFrame = 0;
@@ -42,20 +42,21 @@ int main (int argc, char** argv){
 
 	string name="Original",nameNoisy="Noisy";
 
+	short morpRecRadius = 2; // radius for morphological reconstruction
 	bool useRegionExpansion;
-	bool applyPostProcessing = false;
+	bool applyPostProcessing = true;
 	bool showResults = true;
 	bool useDenoising = false;
 	bool useForegroundFeatures = true;
 
 	bool showSrc = true;
-	/**/
+	/**
 	bool withOriginal = false;
 	bool withNoisy = true;
 	/**
 	bool withOriginal = true;
 	bool withNoisy = false;
-	/**
+	/**/
 	bool withOriginal = true;
 	bool withNoisy = true;
 	/**/
@@ -66,10 +67,10 @@ int main (int argc, char** argv){
 	io::readInputImage(dirInput,fnRoi,true,ROI);
 
 	dataset.next(prvFr);
-	Fbof fbof(name,showResults,useDenoising,useForegroundFeatures);
-	Fbof fbofNoisy(nameNoisy,showResults,useDenoising,useForegroundFeatures);
-	// Fbof fbofExp(name+" Exp",showResults,useDenoising,useForegroundFeatures);
-	// Fbof fbofExpNoisy(nameNoisy+" Exp",showResults,useDenoising,useForegroundFeatures);
+	Fbof fbof(name,morpRecRadius,showResults,useDenoising,useForegroundFeatures);
+	Fbof fbofNoisy(nameNoisy,morpRecRadius,showResults,useDenoising,useForegroundFeatures);
+	// Fbof fbofExp(name+" Exp",morpRecRadius,showResults,useDenoising,useForegroundFeatures);
+	// Fbof fbofExpNoisy(nameNoisy+" Exp",morpRecRadius,showResults,useDenoising,useForegroundFeatures);
 
 	motCompMask = Mat::zeros(prvFr.size(),CV_8UC1);
 	motCompMask.copyTo(motCompMaskNoisy);
@@ -85,7 +86,7 @@ int main (int argc, char** argv){
 		addNoise(nxtFr,nxtFrNoisy);
 
 		// Use only morphological reconstruction
-		useRegionExpansion = false;
+		useRegionExpansion = true;
 
 		if(showSrc) io::showImage("Src",prvFr,true);
 		if(withOriginal) fbof.motionDetection(prvFr,nxtFr,motCompMask,motionMask,applyPostProcessing,onlyUpdateBGModel,useRegionExpansion);

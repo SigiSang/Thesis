@@ -5,6 +5,7 @@
 using std::endl;
 using std::ostream;
 using std::stringstream;
+#include <cmath>
 #include <vector>
 using std::vector;
 #include <string>
@@ -152,6 +153,33 @@ void boundingBoxes(const Mat& src, Mat& dst){
 	stringstream ss;
 	ss<<n;
 	putText(dst,ss.str(),Point(30,30),FONT_HERSHEY_SIMPLEX,.75,red);
+}
+
+float vectorLengthSquared(float deltaX, float deltaY){
+	return deltaX*deltaX + deltaY*deltaY;
+}
+
+float vectorLength(float deltaX, float deltaY){
+	return sqrt(vectorLengthSquared(deltaX,deltaY));
+}
+
+// Checks radii for one quarter of the circle, sets values for corresponding pixels in other quarters
+void getCircularStructuringElement(short radius, Mat& struc){
+	short size = 2*radius+1;
+	struc = Mat::zeros(Size(size,size),CV_8UC1);
+	int cX = radius, cY = radius; // center pixel index
+	int rSq = radius*radius;
+	for(int i=0;i<=radius;i++){
+		for(int j=0;j<=radius;j++){
+			int sqSum = i*i+j*j;
+			if(sqSum <= rSq){
+				struc.at<uchar>(cY+j,cX+i) = 1;
+				struc.at<uchar>(cY-j,cX+i) = 1;
+				struc.at<uchar>(cY+j,cX-i) = 1;
+				struc.at<uchar>(cY-j,cX-i) = 1;
+			}
+		}
+	}
 }
 
 #endif

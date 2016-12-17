@@ -12,14 +12,14 @@ using namespace cv;
 class Fbof{
 public:
 	Fbof(){}
-	Fbof(string _name,bool _showResults=false,bool _useDenoising=false,bool _useForegroundFeatures=true):name(_name),showResults(_showResults),useDenoising(_useDenoising),useForegroundFeatures(_useForegroundFeatures){ init(); }
+	Fbof(string _name, short _morpRecRadius=2,bool _showResults=false,bool _useDenoising=false,bool _useForegroundFeatures=true):name(_name),morpRecRadius(_morpRecRadius),showResults(_showResults),useDenoising(_useDenoising),useForegroundFeatures(_useForegroundFeatures){ init(); }
 	~Fbof(){}
 
 void motionDetection(Mat& prvFr,Mat& nxtFr,Mat& motCompMask,Mat& motionMask,bool usePostProcessing,bool onlyUpdateBGModel,bool useRegExpansion);
 
 protected:
-	typedef Vec<short,3> DataVec;
-	// typedef Vec<float,3> DataVec;
+	typedef float DataVecType;
+	typedef Vec<DataVecType,3> DataVec;
 	typedef Vec<float,2> OptFlowVec;
 
 	string name;
@@ -27,6 +27,7 @@ protected:
 	bool showResults;
 	bool useDenoising;
 	bool useForegroundFeatures;
+	short morpRecRadius; // radius for morphological reconstruction
 
 	void init();
 	void checkRegulData(const Mat& mask, const Mat& regulData);
@@ -34,12 +35,13 @@ protected:
 	void backgroundSubtraction(const Mat& frame, Mat& fgMask, Ptr<BackgroundSubtractor> pMOG2);
 	void getOptFlowFeatures(const Mat& motCompMask, const Mat& fgMask, Mat& combinedMask, vector<Point2f>& goodFeaturesToTrack, bool useForegroundFeatures);
 	void opticalFlow(const Mat& prvFr, const Mat& nxtFr, vector<uchar>& status, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& fgMask);
+	bool similarVectorEstimation(const DataVec& data1, const DataVec& data2);
 	void similarNeighbourWeighting(const Mat& data, Mat& weights);
-	void optFlowRegularization(const Size& size, Mat& dst, vector<uchar>& status, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& weights, Mat& data);
-	void expandByList(const Mat& mask, Mat& marker, vector<bool>& expanded, vector<int> toExpand, short deltaX, short deltaY);
-	void expandMarker(const Mat& mask, const Mat& data, Mat& marker);
-	void morphologicalReconstruction(Mat& dst, const Mat& mask, const Mat& marker);
-	void regularizeDataByList(const Mat& mask, vector<bool>& expanded, vector<int> toExpand, Mat& regulData, short deltaX, short deltaY);
+	void optFlowRegularization(const Size& size, const Mat& fgMask, Mat& dst, vector<uchar>& status, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& weights, Mat& data);
+	void expandByList(const Mat& data, const Mat& mask, Mat& marker, vector<bool>& expanded, vector<int> toExpand);
+	void expandMarker(const Mat& data, const Mat& mask, const Mat& marker, Mat& dst);
+	void morphologicalReconstruction(const Mat& mask, const Mat& marker, Mat& dst);
+	void regularizeDataByList(const Mat& mask, vector<bool>& expanded, vector<int> toExpand, Mat& regulData, DataVecType deltaX, DataVecType deltaY);
 	void regularizeData(const Mat& marker, const Mat& mask, const Mat& data, Mat& regulData);
 	void applyMotion(const Mat& src, const Mat& regulData, Mat& dst);
 	// void motionCompensation(const Mat& motionMask, Mat& motCompMask, const Mat& data);
@@ -147,6 +149,32 @@ void Fbof::opticalFlow(const Mat& prvFr, const Mat& nxtFr, vector<uchar>& status
 	}
 }
 
+bool Fbof::similarVectorEstimation(const DataVec& dataVec1, const DataVec& dataVec2){
+	float t = 0.05; // similarity threshold: similarity if difference is below threshold
+	float tSquared = t*t;
+
+	DataVecType deltaX1 = dataVec1[1];
+	DataVecType deltaY1 = dataVec1[2];
+	DataVecType deltaX2 = dataVec2[1];
+	DataVecType deltaY2 = dataVec2[2];
+
+	DataVecType deltaXd = deltaX2 - deltaX1;
+	DataVecType deltaYd = deltaY2 - deltaY1;
+
+	float dLengthSquared = vectorLengthSquared(deltaXd,deltaYd);
+	float v1LengthSquared = vectorLengthSquared(deltaX1,deltaY1);
+
+	if(v1LengthSquared == 0) return false; // Should never occur, only compare non-zero vectors
+	// cout<<dLengthSquared<<" "<<v1LengthSquared<<" "<<dLengthSquared/v1LengthSquared<<endl;
+	return ( dLengthSquared/v1LengthSquared < tSquared );
+
+	return (
+		deltaX1 == deltaX2
+		&&
+		deltaY1 == deltaY2
+	);
+}
+
 void Fbof::similarNeighbourWeighting(const Mat& data, Mat& weights){
 	short r = 1; //Radius
 	// windowWidth = 2r+1
@@ -156,18 +184,15 @@ void Fbof::similarNeighbourWeighting(const Mat& data, Mat& weights){
 	for(int x=0;x<data.cols;x++){
 	for(int y=0;y<data.rows;y++){
 		short neighbours = 0;
-		short deltaX = data.at<DataVec>(y,x)[1];
-		short deltaY = data.at<DataVec>(y,x)[2];
-		// float deltaX = data.at<DataVec>(y,x)[1];
-		// float deltaY = data.at<DataVec>(y,x)[2];
-		if(deltaX != 0 && deltaY != 0){
+		DataVec dataVec = data.at<DataVec>(y,x);
+		// if(!(dataVec[1] == 0 && dataVec[2] == 0)){ // Only non-zero vectors
+		if(dataVec[1] != 0 && dataVec[2] != 0){
 			for(int i=-1; i<=r; i+=r){
 			if(x+i>0 && x+i < data.cols){
 				for(int j=-1; j<=r; j+=r){
 				if(!(i==0 && j==0) && y+j>0 && y+j < data.rows){
-					if(deltaX == data.at<DataVec>(y+j,x+i)[1]
-						&&
-						deltaY == data.at<DataVec>(y+j,x+i)[2]){
+					DataVec dataVec2 = data.at<DataVec>(y+j,x+i);
+					if(similarVectorEstimation(dataVec,dataVec2)){
 						neighbours++;
 					}
 				}
@@ -186,11 +211,21 @@ void Fbof::similarNeighbourWeighting(const Mat& data, Mat& weights){
 /*
 * TODO thresholding at half the weight == 8 equal neighbours >> 7 equal neighbours == (2⁷-1)/255 = 0.49!
 * Remove exponential weighting in similarNeighbourWeighting
+* TODO add squared vector length to Datavec
 */
-void Fbof::optFlowRegularization(const Size& size, Mat& dst, vector<uchar>& status, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& weights, Mat& data){
+void Fbof::optFlowRegularization(const Size& size, const Mat& fgMask, Mat& dst, vector<uchar>& status, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& weights, Mat& data){
 
-    data = Mat::zeros(size,CV_16SC3);
-    // data = Mat::zeros(size,CV_32FC3);
+	float t = 2.0; // Minimum vector size
+	float tSquared = t*t;
+
+	Mat dataWeighting;
+	if(std::is_same<DataVecType,short>::value){
+    	data = Mat::zeros(size,CV_16SC3);
+    	dataWeighting = Mat::zeros(size,CV_16SC3);
+	}else{
+    	data = Mat::zeros(size,CV_32FC3);
+    	dataWeighting = Mat::zeros(size,CV_32FC3);
+    }
 	weights = Mat::zeros(size,CV_32FC1);
 
 	bool usePyrLK = true;
@@ -198,26 +233,33 @@ void Fbof::optFlowRegularization(const Size& size, Mat& dst, vector<uchar>& stat
 	// Optical flow to data
     for(int ptsIdx=0;ptsIdx<prvPts.size();ptsIdx++){
     	if(!usePyrLK || status[ptsIdx]){
-			int x1=prvPts[ptsIdx].x,y1=prvPts[ptsIdx].y,x2=nxtPts[ptsIdx].x,y2=nxtPts[ptsIdx].y;
-			short deltaX = x2-x1;
-			short deltaY = y2-y1;
-			// float x1=prvPts[ptsIdx].x,y1=prvPts[ptsIdx].y,x2=nxtPts[ptsIdx].x,y2=nxtPts[ptsIdx].y;
-			// float deltaX = x2-x1;
-			// float deltaY = y2-y1;
-			// if(abs(deltaX) > 1 || abs(deltaY) > 1){
-				data.at<DataVec>(y1,x1)[0] = ptsIdx;
-				data.at<DataVec>(y1,x1)[1] = deltaX;
-				data.at<DataVec>(y1,x1)[2] = deltaY;
-			// }
+			DataVecType x1=prvPts[ptsIdx].x,y1=prvPts[ptsIdx].y,x2=nxtPts[ptsIdx].x,y2=nxtPts[ptsIdx].y;
+			DataVecType deltaX = x2-x1;
+			DataVecType deltaY = y2-y1;
+			if(vectorLengthSquared(deltaX,deltaY) < tSquared){
+				deltaX = 0;
+				deltaY = 0;
+			}
+			data.at<DataVec>(y1,x1)[0] = ptsIdx;
+			data.at<DataVec>(y1,x1)[1] = deltaX;
+			data.at<DataVec>(y1,x1)[2] = deltaY;
+			if(fgMask.at<uchar>(y1,x1) > 0){
+				dataWeighting.at<DataVec>(y1,x1)[0] = ptsIdx;
+				dataWeighting.at<DataVec>(y1,x1)[1] = deltaX;
+				dataWeighting.at<DataVec>(y1,x1)[2] = deltaY;
+			}
     	}
     }
 
     // Weighting for regularization
-	similarNeighbourWeighting(data,weights);
+	similarNeighbourWeighting(dataWeighting,weights);
+
+	float weightThreshold = 0.6;
+	uchar convertedThreshold = 255*weightThreshold;
 
     dst = Mat::ones(size,CV_8UC1);
     weights.convertTo(dst,CV_8UC1,255);
-   	threshold(dst,dst,127);
+   	threshold(dst,dst,convertedThreshold);
 }
 
 /* Main difference in result with morphological reconstruction:
@@ -225,66 +267,90 @@ void Fbof::optFlowRegularization(const Size& size, Mat& dst, vector<uchar>& stat
 * while this method searches withing a window around a pixel
 * (pixel at the center, window is square with edge size = 2r+1 for a set radius r)
 */
-void Fbof::expandByList(const Mat& mask, Mat& marker, vector<bool>& expanded, vector<int> toExpand, short deltaX, short deltaY){
-    const int width=mask.cols, height=mask.rows, r=2;
+void Fbof::expandByList(const Mat& data, const Mat& mask, Mat& marker, vector<bool>& expanded, vector<int> toExpand){
+    const int width=mask.cols, height=mask.rows, r=morpRecRadius;
+   	int strucSize = 2*r+1;
+   	int c=r; // centre of struc
+    Mat struc;
+    struc = getStructuringElement(MORPH_ELLIPSE,Size(strucSize,strucSize));
+    // getCircularStructuringElement(r,struc);
 	for(int i=0; i<toExpand.size();i++){
     	int idx = toExpand[i];
     	if(!expanded[idx]){
     		expanded[idx] = true;
     		marker.at<uchar>(idx)=(uchar)(-1); // Max value
-			for(int i=-r; i<=r; i++){
-			for(int j=-r; j<=r; j++){
-				int idxNb = idx+j*width+i;
-				if(idxNb != idx && idxNb>0 && idxNb < width*height){
-					if( (short)(mask.at<uchar>(idxNb))>0){
-						toExpand.push_back(idxNb);
+			for(int i=0; i<strucSize; i++){
+			for(int j=0; j<strucSize; j++){
+				if(struc.at<uchar>(j,i)>0){
+					// (i,j) are the coordinates in the structuring element
+					// (i-c,j-c) are the coordinates of the neighbouring pixel, relative to the current centring pixel
+					int idxNb = idx+(j-c)*width+(i-c);
+					if(idxNb != idx && idxNb>0 && idxNb < width*height){
+						if( (short)(mask.at<uchar>(idxNb))>0
+							||
+							similarVectorEstimation(data.at<DataVec>(idx),data.at<DataVec>(idxNb))
+							){
+							toExpand.push_back(idxNb);
+						}
 					}
 				}
 			}
 			}
     	}
 	}
+	// for(int i=0; i<toExpand.size();i++){
+ //    	int idx = toExpand[i];
+ //    	if(!expanded[idx]){
+ //    		expanded[idx] = true;
+ //    		marker.at<uchar>(idx)=(uchar)(-1); // Max value
+	// 		for(int i=-r; i<=r; i++){
+	// 		for(int j=-r; j<=r; j++){
+	// 			int idxNb = idx+j*width+i;
+	// 			if(idxNb != idx && idxNb>0 && idxNb < width*height){
+	// 				if( (short)(mask.at<uchar>(idxNb))>0){
+	// 					toExpand.push_back(idxNb);
+	// 				}
+	// 			}
+	// 		}
+	// 		}
+ //    	}
+	// }
 }
 
-void Fbof::expandMarker(const Mat& mask, const Mat& data, Mat& marker){
+void Fbof::expandMarker(const Mat& data, const Mat& mask, const Mat& marker, Mat& dst){
     const int width=mask.cols, height=mask.rows;
+    marker.copyTo(dst);
    	vector<bool> expanded(width*height,false);
     for(int x=0;x<width;x++){
     for(int y=0;y<height;y++){
-    	if((int)(marker.at<uchar>(y,x))>127){
+    	if((int)(dst.at<uchar>(y,x))>127){
     		int idx = y*width+x;
 	    	if(!expanded[idx]){
 				vector<int> toExpand;
-				short deltaX = data.at<DataVec>(y,x)[1];
-				short deltaY = data.at<DataVec>(y,x)[2];
-				// float deltaX = data.at<DataVec>(y,x)[1];
-				// float deltaY = data.at<DataVec>(y,x)[2];
-
 				toExpand.push_back(idx);
-				expandByList(mask,marker,expanded,toExpand,deltaX,deltaY);
+				expandByList(data,mask,dst,expanded,toExpand);
 	    	}
 	    }
     }
     }
 }
 
-void Fbof::morphologicalReconstruction(Mat& dst, const Mat& mask, const Mat& marker){
+void Fbof::morphologicalReconstruction(const Mat& mask, const Mat& marker, Mat& dst){
    	Mat dilation,maskedDilation,prevMaskedDilation;
    	bool hasChanged;
-   	int strucSize = 7;
-   	// int strucSize = 5; // @see expandByList : Corresponds to radius r=2 (diameter 2r+1)
-   	int numOfIterations = 0;
-	Mat struc = getStructuringElement(MORPH_ELLIPSE,Size(strucSize,strucSize));
+   	int r=morpRecRadius;
+   	int strucSize = 2*r+1;
+    Mat struc;
+    struc = getStructuringElement(MORPH_ELLIPSE,Size(strucSize,strucSize));
+    // getCircularStructuringElement(r,struc);
     // TODO Change threshold value to variable
    	threshold(marker,maskedDilation,127);
    	do{
-   		numOfIterations++;
    		maskedDilation.copyTo(prevMaskedDilation);
    		dilate(prevMaskedDilation,dilation,struc);
    		min(dilation,mask,maskedDilation);
    		hasChanged = (countNonZero(maskedDilation!=prevMaskedDilation) != 0);
    	}while(hasChanged);
-   	// cout<<"Morph Reconstr Iterations: "<<numOfIterations<<endl;
    	maskedDilation.copyTo(dst);
 }
 
@@ -293,7 +359,7 @@ void Fbof::morphologicalReconstruction(Mat& dst, const Mat& mask, const Mat& mar
 * Mogelijks efficienter: 2e set array die unieke indexen van toExpand bijhoudt, gebruiken voor check. toExpand behouden om volgorde van expanderen te bepalen.
 * TODO --^ 
 */
-void Fbof::regularizeDataByList(const Mat& mask, vector<bool>& expanded, vector<int> toExpand, Mat& regulData, short deltaX, short deltaY){
+void Fbof::regularizeDataByList(const Mat& mask, vector<bool>& expanded, vector<int> toExpand, Mat& regulData, DataVecType deltaX, DataVecType deltaY){
     const int width=mask.cols, height=mask.rows, r=1;
 	for(int i=0; i<toExpand.size();i++){
     	int idx = toExpand[i];
@@ -330,10 +396,8 @@ void Fbof::regularizeData(const Mat& marker, const Mat& mask, const Mat& data, M
     		int idx = y*width+x;
 	    	if(!expanded[idx]){
 				vector<int> toExpand;
-				short deltaX = data.at<DataVec>(y,x)[1];
-				short deltaY = data.at<DataVec>(y,x)[2];
-				// float deltaX = data.at<DataVec>(y,x)[1];
-				// float deltaY = data.at<DataVec>(y,x)[2];
+				DataVecType deltaX = data.at<DataVec>(y,x)[1];
+				DataVecType deltaY = data.at<DataVec>(y,x)[2];
 
 				toExpand.push_back(idx);
 				regularizeDataByList(mask,expanded,toExpand,regulData,deltaX,deltaY);
@@ -351,8 +415,8 @@ void Fbof::applyMotion(const Mat& src, const Mat& regulData, Mat& dst){
     for(int x=0;x<width;x++){
     for(int y=0;y<height;y++){
     	if((short)(src.at<uchar>(y,x))>0){
-			short newX = x + regulData.at<DataVec>(y,x)[1];
-			short newY = y + regulData.at<DataVec>(y,x)[2];
+			DataVecType newX = x + regulData.at<DataVec>(y,x)[1];
+			DataVecType newY = y + regulData.at<DataVec>(y,x)[2];
 			if(newX >= 0 && newY >= 0 && newX < width && newY < height)
 				dst.at<uchar>(newY,newX) = (uchar)(-1);
     	}
@@ -367,8 +431,10 @@ void Fbof::applyMotion(const Mat& src, const Mat& regulData, Mat& dst){
 //     for(int x=0;x<width;x++){
 //     for(int y=0;y<height;y++){
 //     	if((short)(motionMask.at<uchar>(y,x))>0){
-// 			short newX = x + data.at<DataVec>(y,x)[1];
-// 			short newY = y + data.at<DataVec>(y,x)[2];
+//			// short newX = x + data.at<DataVec>(y,x)[1];
+//			// short newY = y + data.at<DataVec>(y,x)[2];
+//			float newX = x + regulData.at<DataVec>(y,x)[1];
+//			float newY = y + regulData.at<DataVec>(y,x)[2];
 // 			if(newX >= 0 && newY >= 0 && newX < width && newY < height){
 //     			motCompMask.at<uchar>(newY,newX) = motionMask.at<uchar>(y,x);
 // 			}
@@ -392,111 +458,132 @@ void Fbof::motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motion
 	Mat data, regulData;
 	Mat prvFrDenoised,fgMask,combMask,maskReg,morphRecMask,morphRecMarker,weights,optFlow,postMotionMask;
 
-	Mat motionMask_wo_OFEI;
+	/* TMP for checking workflow */
+	motionMask = Mat::zeros(prvFr.size(),CV_8UC1);
+	/* TMP END */
 
 	if(useDenoising)
 		denoise(prvFr,prvFrDenoised);
 	else
 		prvFr.copyTo(prvFrDenoised);
 
+	// Background subtraction
 	backgroundSubtraction(prvFrDenoised,fgMask,pMOG2);
 
 	if(!onlyUpdateBGModel){
-		string namePrefix = name;
-		// for(bool optFlowOnEntireImage : {false,true}){
-		for(bool optFlowOnEntireImage : {false}){
-			name = namePrefix+" w"+(optFlowOnEntireImage?"":"o")+"_OFEI";
-			if(optFlowOnEntireImage){
-				binMat2Vec(Mat::ones(prvFr.size(),CV_8UC1),prvPts);
-				opticalFlow(prvFr,nxtFr,status,prvPts,nxtPts,fgMask);
-				optFlowRegularization(prvFr.size(),maskReg,status,prvPts,nxtPts,weights,data);
-				bitwise_or(fgMask,maskReg,morphRecMask);
-			}else{
-				fgMask.copyTo(morphRecMask);
-			}
-			getOptFlowFeatures(motCompMask,fgMask,combMask,prvPts,useForegroundFeatures);
-			opticalFlow(prvFr,nxtFr,status,prvPts,nxtPts,fgMask);
-			optFlowRegularization(prvFr.size(),maskReg,status,prvPts,nxtPts,weights,data);
-			maskReg.copyTo(morphRecMarker);
-			// io::showMaskOverlap(fgMask,"fgMask",morphRecMarker,"morphRecMarker",morphRecMask,"morphRecMask");
-			// io::showMaskOverlap(morphRecMarker,"morphRecMarker",morphRecMask,"morphRecMask");
 
-			motionMask = Mat::zeros(prvFr.size(),CV_8UC1);
-			if(!useRegExpansion){
-			   	// Morphological reconstruction
-			   	morphologicalReconstruction(motionMask,morphRecMask,morphRecMarker);
-		   	}else{
-		   		// Morphological reconstruction by region expansion
-			   	morphRecMarker.copyTo(motionMask);
-			   	expandMarker(morphRecMask,data,motionMask);
-		   	}
+		// Optical flow
+		// binMat2Vec(fgMask,prvPts);
+		binMat2Vec(Mat::ones(prvFr.size(),CV_8UC1),prvPts);
+		opticalFlow(prvFr,nxtFr,status,prvPts,nxtPts,fgMask);
 
-		   	if(!optFlowOnEntireImage) motionMask.copyTo(motionMask_wo_OFEI);
+		// Optical flow regularization
+		optFlowRegularization(prvFr.size(),fgMask,maskReg,status,prvPts,nxtPts,weights,data);
 
-		   	/* Compare morphological reconstruction by iterative dilation and differencing, and by marker expansion.
-		   	See notes at expandMarker, correct implementation must give same results as first MR method, but more efficiently. *
-			Mat maskMorph,maskExp;
-			morphologicalReconstruction(maskMorph,fgMask,maskReg);
-			maskReg.copyTo(maskExp);
-			expandMarker(fgMask,data,maskExp);
-			cout<<"Morph vs Exp"<<endl;
-			io::printScores(maskMorph,maskExp);
-		    io::showMaskOverlap(maskMorph,"Morph",maskExp,"Exp");
-			maskMorph.copyTo(motionMask); /**/
+		// Foreground reduce
+		// fgMask.copyTo(morphRecMarker);
+		bitwise_and(fgMask,maskReg,morphRecMarker);
 
-		   	if(usePostProcessing){
-		   		postProcessing(motionMask);
-			}
+		// Foreground expand
+		fgMask.copyTo(morphRecMask);
+		motionMask = Mat::zeros(prvFr.size(),CV_8UC1);
+		if(!useRegExpansion){
+		   	// Morphological reconstruction
+		   	morphologicalReconstruction(morphRecMask,morphRecMarker,motionMask);
+	   	}else{
+	   		// Morphological reconstruction by region expansion
+		   	expandMarker(data,morphRecMask,morphRecMarker,motionMask);
+	   	}
+	   	/* TR START Checking workflow*
+	   	/* TR END Checking workflow*/
 
-		   	// regularizeData(maskReg,motionMask,data,regulData);
+		Mat motMaskMorph,motMaskExp;
+		morphologicalReconstruction(morphRecMask,morphRecMarker,motMaskMorph);
+		expandMarker(data,morphRecMask,morphRecMarker,motMaskExp);
+		cout<<"Morph vs Exp"<<endl;
+		io::printScores(motMaskMorph,motMaskExp);
+	    io::showMaskOverlap(motMaskMorph,"Morph",motMaskExp,"Exp"); /**/
 
-		   	// applyMotion(motionMask,regulData,postMotionMask);
-		   	
-			// motionCompensation(motionMask,motCompMask,regulData);
+	   	if(usePostProcessing){
+	   		postProcessing(motionMask);
+		}
 
+	   	// regularizeData(maskReg,motionMask,data,regulData);
 
-		   	if(showResults){
-				// Draw optical flow motion vectors
-	    		prvFr.copyTo(optFlow);
-			    if(optFlow.channels()==1) cvtColor(optFlow,optFlow,CV_GRAY2BGR);
-			    Scalar red(0,0,255), blue(255,0,0), green(0,255,0);
-				int thickness=1, lineType=8, shift=0;
-				double tipLength=0.1;
-				int width = data.cols, height = data.rows;
-				// int skip = 1;
-				int skip = 5;
-			    for(int x=0;x<width;x+=skip){
-			    for(int y=0;y<height;y+=skip){
-			    	if(data.at<DataVec>(y,x)[1] > 0 || data.at<DataVec>(y,x)[2] > 0){
+	   	// applyMotion(motionMask,regulData,postMotionMask);
+	   	
+		// motionCompensation(motionMask,motCompMask,regulData);
+
+   		if(showResults){
+			// Draw optical flow motion vectors
+			Mat optFlow2;
+    		prvFr.copyTo(optFlow);
+    		prvFr.copyTo(optFlow2);
+		    if(optFlow.channels()==1){
+		    	cvtColor(optFlow,optFlow,CV_GRAY2BGR);
+		    	cvtColor(optFlow2,optFlow2,CV_GRAY2BGR);
+		    }
+		    Scalar red(0,0,255), blue(255,0,0), green(0,255,0);
+			int thickness=1, lineType=8, shift=0;
+			double tipLength=0.1;
+			int width = data.cols, height = data.rows;
+
+			int skip;
+			bool arrows = false;
+			if(!arrows) skip = 1; else skip = 5;
+		    for(int x=0;x<width;x+=skip){
+		    for(int y=0;y<height;y+=skip){
+		    	if(data.at<DataVec>(y,x)[1] > 0 || data.at<DataVec>(y,x)[2] > 0){
+					short newX = x + data.at<DataVec>(y,x)[1];
+					short newY = y + data.at<DataVec>(y,x)[2];
+					if(newX >= 0 && newY >= 0 && newX < width && newY < height){
+		    			if(arrows) arrowedLine(optFlow,Point2f(x,y),Point2f(newX,newY),green,thickness,lineType,shift,tipLength);
+		    			else{
+			    			line(optFlow,Point2f(x,y),Point2f(newX,newY),blue);
+			    			circle(optFlow,Point2f(newX,newY),3,red);
+		    			}
+					}
+				}
+		    }
+		    }
+		    for(int x=0;x<width;x+=skip){
+		    for(int y=0;y<height;y+=skip){
+		    	if(motionMask.at<uchar>(y,x)>0){
+		    		if(data.at<DataVec>(y,x)[1] > 0 || data.at<DataVec>(y,x)[2] > 0){
 						short newX = x + data.at<DataVec>(y,x)[1];
 						short newY = y + data.at<DataVec>(y,x)[2];
 						if(newX >= 0 && newY >= 0 && newX < width && newY < height){
-			    			arrowedLine(optFlow,Point2f(x,y),Point2f(newX,newY),green,thickness,lineType,shift,tipLength);
+			    			if(arrows) arrowedLine(optFlow,Point2f(x,y),Point2f(newX,newY),green,thickness,lineType,shift,tipLength);
+			    			else{
+				    			line(optFlow,Point2f(x,y),Point2f(newX,newY),blue);
+				    			circle(optFlow,Point2f(newX,newY),3,red);
+			    			}
 						}
 					}
-			    }
-			    }
-
-			    bool saveResults = false;
-				bool resize = true;
-				string postfix = "";
-				// postfix = useDenoising? " w den" : " wo den";-
-				// if(useDenoising) io::showImage(name+" Denoised"+postfix,prvFrDenoised,resize,saveResults);
-				io::showImage(name+" Foreground Mask"+postfix,fgMask,resize,saveResults);
-				// io::showImage(name+" Comb Mask",combMask,resize,saveResults);
-				io::showImage(name+" OptFlow1"+postfix,optFlow,resize,saveResults);
-				io::showImage(name+" Weights"+postfix,weights,resize,saveResults);
-				io::showImage(name+" Weights thresholded"+postfix,maskReg,resize,saveResults);
-				// io::showImage(name+" Morph Rec"+postfix,maskMorph,resize,saveResults);
-				// io::showImage(name+" Expansion"+postfix,maskExp,resize,saveResults);
-				io::showImage(name+" MR Marker"+postfix,morphRecMarker,resize,saveResults);
-				io::showImage(name+" MR Mask"+postfix,morphRecMask,resize,saveResults);
-				io::showImage(name+" MotionMask"+postfix,motionMask,resize,saveResults);
-		    	// io::showMaskOverlap(motionMask,name+" MotionMask",postMotionMask,"PostMotionMask"+postfix,saveResults);
+				}
 		    }
-		    name = namePrefix;
+		    }
+
+		    bool saveResults = false;
+			bool resize = true;
+			string postfix = "";
+			// postfix = useDenoising? " w den" : " wo den";-
+			// if(useDenoising) io::showImage(name+" Denoised"+postfix,prvFrDenoised,resize,saveResults);
+			io::showImage(name+" Foreground Mask"+postfix,fgMask,resize,saveResults);
+			// io::showImage(name+" Comb Mask",combMask,resize,saveResults);
+			io::showImage(name+" OptFlow1"+postfix,optFlow,resize,saveResults);
+			// io::showImage(name+" OptFlow2"+postfix,optFlow2,resize,saveResults);
+			// io::showImage(name+" Weights"+postfix,weights,resize,saveResults);
+			io::showImage(name+" Weights thresholded"+postfix,maskReg,resize,saveResults);
+			// io::showImage(name+" Morph Rec"+postfix,motMaskMorph,resize,saveResults);
+			// io::showImage(name+" Expansion"+postfix,motMaskExp,resize,saveResults);
+			io::showImage(name+" MR Marker"+postfix,morphRecMarker,resize,saveResults);
+			io::showImage(name+" MR Mask"+postfix,morphRecMask,resize,saveResults);
+			io::showImage(name+" MotionMask"+postfix,motionMask,resize,saveResults);
+			
+			io::showMaskOverlap(fgMask,name+" Foreground Mask",motionMask,name+" MotionMask");
+	    	// io::showMaskOverlap(motionMask,name+" MotionMask",postMotionMask,"PostMotionMask"+postfix);
 		}
-		// io::showMaskOverlap(motionMask_wo_OFEI,"motMasWoOFEI",motionMask,"motMas");
 	}
 }
 

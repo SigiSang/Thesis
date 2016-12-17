@@ -37,7 +37,7 @@ namespace io {
 	/** Shown image properties and helper values **/
 	int imX=5,imY=5
 		,shownImages=0
-		,consecutiveImages=4
+		,consecutiveImages=6
 		,normalXSize=320
 		,normalYSize=261;
 
