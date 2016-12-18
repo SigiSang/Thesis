@@ -152,7 +152,7 @@ void Fbof::opticalFlow(const Mat& prvFr, const Mat& nxtFr, vector<uchar>& status
 }
 
 bool Fbof::similarVectorEstimation(const DataVec& dataVec1, const DataVec& dataVec2){
-	float t = 0.05; // similarity threshold: similarity if difference is below threshold
+	float t = 0.03; // similarity threshold: similarity if difference is below threshold
 	float tSquared = t*t;
 
 	DataVecType deltaX1 = dataVec1[1];
