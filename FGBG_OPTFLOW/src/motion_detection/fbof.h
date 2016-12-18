@@ -37,7 +37,7 @@ protected:
 	void opticalFlow(const Mat& prvFr, const Mat& nxtFr, vector<uchar>& status, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& fgMask);
 	bool similarVectorEstimation(const DataVec& data1, const DataVec& data2);
 	void similarNeighbourWeighting(const Mat& data, Mat& weights);
-	void optFlowRegularization(const Size& size, const Mat& fgMask, Mat& dst, vector<uchar>& status, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& weights, Mat& data);
+	void optFlowRegularization(const Size& size, const Mat& fgMask, Mat& dst, vector<uchar>& status, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& weights, Mat& data, Mat& weightsEntireFrameMask);
 	void expandByList(const Mat& data, const Mat& mask, Mat& marker, vector<bool>& expanded, vector<int> toExpand);
 	void expandMarker(const Mat& data, const Mat& mask, const Mat& marker, Mat& dst);
 	void morphologicalReconstruction(const Mat& mask, const Mat& marker, Mat& dst);
@@ -104,7 +104,9 @@ void Fbof::opticalFlow(const Mat& prvFr, const Mat& nxtFr, vector<uchar>& status
 	bool usePyrLK = true;
 	if(usePyrLK){
 		TermCriteria termcrit(TermCriteria::COUNT|TermCriteria::EPS,20,0.03);
-		Size winSize(21,21);
+		// int ws = 7;
+		int ws = 21;
+		Size winSize(ws,ws);
 		vector<float> err;
 
 		if(prvPts.empty()){
@@ -213,7 +215,7 @@ void Fbof::similarNeighbourWeighting(const Mat& data, Mat& weights){
 * Remove exponential weighting in similarNeighbourWeighting
 * TODO add squared vector length to Datavec
 */
-void Fbof::optFlowRegularization(const Size& size, const Mat& fgMask, Mat& dst, vector<uchar>& status, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& weights, Mat& data){
+void Fbof::optFlowRegularization(const Size& size, const Mat& fgMask, Mat& dst, vector<uchar>& status, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& weights, Mat& data, Mat& weightsEntireFrameMask){
 
 	float t = 2.0; // Minimum vector size
 	float tSquared = t*t;
@@ -227,6 +229,7 @@ void Fbof::optFlowRegularization(const Size& size, const Mat& fgMask, Mat& dst, 
     	dataWeighting = Mat::zeros(size,CV_32FC3);
     }
 	weights = Mat::zeros(size,CV_32FC1);
+	Mat weightsEntireFrame = Mat::zeros(size,CV_32FC1);
 
 	bool usePyrLK = true;
 
@@ -251,15 +254,22 @@ void Fbof::optFlowRegularization(const Size& size, const Mat& fgMask, Mat& dst, 
     	}
     }
 
-    // Weighting for regularization
-	similarNeighbourWeighting(dataWeighting,weights);
-
 	float weightThreshold = 0.6;
 	uchar convertedThreshold = 255*weightThreshold;
+
+    // Weighting for regularization
+	similarNeighbourWeighting(dataWeighting,weights);
 
     dst = Mat::ones(size,CV_8UC1);
     weights.convertTo(dst,CV_8UC1,255);
    	threshold(dst,dst,convertedThreshold);
+
+	weightThreshold = .6;
+	convertedThreshold = 255*weightThreshold;
+	similarNeighbourWeighting(data,weightsEntireFrame);
+    weightsEntireFrameMask = Mat::ones(size,CV_8UC1);
+    weightsEntireFrame.convertTo(weightsEntireFrameMask,CV_8UC1,255);
+   	threshold(weightsEntireFrameMask,weightsEntireFrameMask,convertedThreshold);
 }
 
 /* Main difference in result with morphological reconstruction:
@@ -287,8 +297,8 @@ void Fbof::expandByList(const Mat& data, const Mat& mask, Mat& marker, vector<bo
 					int idxNb = idx+(j-c)*width+(i-c);
 					if(idxNb != idx && idxNb>0 && idxNb < width*height){
 						if( (short)(mask.at<uchar>(idxNb))>0
-							||
-							similarVectorEstimation(data.at<DataVec>(idx),data.at<DataVec>(idxNb))
+							// ||
+							// similarVectorEstimation(data.at<DataVec>(idx),data.at<DataVec>(idxNb))
 							){
 							toExpand.push_back(idxNb);
 						}
@@ -446,7 +456,10 @@ void Fbof::applyMotion(const Mat& src, const Mat& regulData, Mat& dst){
 
 void Fbof::postProcessing(Mat& img){
    	int strucSize = 3;
+	Mat struc = getStructuringElement(MORPH_ELLIPSE,Size(5,5));
    	medianBlur(img,img,strucSize);
+	morphologyEx(img,img,MORPH_CLOSE,struc);
+	morphologyEx(img,img,MORPH_OPEN,struc);
 }
 
 void Fbof::motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motionMask, bool usePostProcessing, bool onlyUpdateBGModel=false, bool useRegExpansion=false){
@@ -472,20 +485,24 @@ void Fbof::motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motion
 
 	if(!onlyUpdateBGModel){
 
+		Mat maskRegEntireFrame;
+
 		// Optical flow
 		// binMat2Vec(fgMask,prvPts);
 		binMat2Vec(Mat::ones(prvFr.size(),CV_8UC1),prvPts);
 		opticalFlow(prvFr,nxtFr,status,prvPts,nxtPts,fgMask);
 
 		// Optical flow regularization
-		optFlowRegularization(prvFr.size(),fgMask,maskReg,status,prvPts,nxtPts,weights,data);
+		optFlowRegularization(prvFr.size(),fgMask,maskReg,status,prvPts,nxtPts,weights,data,maskRegEntireFrame);
 
 		// Foreground reduce
 		// fgMask.copyTo(morphRecMarker);
-		bitwise_and(fgMask,maskReg,morphRecMarker);
+		maskReg.copyTo(morphRecMarker);
+		// bitwise_and(fgMask,maskReg,morphRecMarker);
 
 		// Foreground expand
-		fgMask.copyTo(morphRecMask);
+		// fgMask.copyTo(morphRecMask);
+		bitwise_or(fgMask,maskRegEntireFrame,morphRecMask);
 		motionMask = Mat::zeros(prvFr.size(),CV_8UC1);
 		if(!useRegExpansion){
 		   	// Morphological reconstruction
@@ -500,8 +517,8 @@ void Fbof::motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motion
 		Mat motMaskMorph,motMaskExp;
 		morphologicalReconstruction(morphRecMask,morphRecMarker,motMaskMorph);
 		expandMarker(data,morphRecMask,morphRecMarker,motMaskExp);
-		cout<<"Morph vs Exp"<<endl;
-		io::printScores(motMaskMorph,motMaskExp);
+		// cout<<"Morph vs Exp"<<endl;
+		// io::printScores(motMaskMorph,motMaskExp);
 	    io::showMaskOverlap(motMaskMorph,"Morph",motMaskExp,"Exp"); /**/
 
 	   	if(usePostProcessing){
@@ -575,6 +592,7 @@ void Fbof::motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motion
 			// io::showImage(name+" OptFlow2"+postfix,optFlow2,resize,saveResults);
 			// io::showImage(name+" Weights"+postfix,weights,resize,saveResults);
 			io::showImage(name+" Weights thresholded"+postfix,maskReg,resize,saveResults);
+			io::showImage(name+" Wei Ent Fr thresholded"+postfix,maskRegEntireFrame,resize,saveResults);
 			// io::showImage(name+" Morph Rec"+postfix,motMaskMorph,resize,saveResults);
 			// io::showImage(name+" Expansion"+postfix,motMaskExp,resize,saveResults);
 			io::showImage(name+" MR Marker"+postfix,morphRecMarker,resize,saveResults);
