@@ -50,13 +50,13 @@ int main (int argc, char** argv){
 	bool useForegroundFeatures = true;
 
 	bool showSrc = true;
-	/**
+	/**/
 	bool withOriginal = false;
 	bool withNoisy = true;
 	/**
 	bool withOriginal = true;
 	bool withNoisy = false;
-	/**/
+	/**
 	bool withOriginal = true;
 	bool withNoisy = true;
 	/**/

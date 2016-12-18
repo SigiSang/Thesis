@@ -9,6 +9,8 @@ using namespace cv;
 #include "denoising.h"
 #include "scores.h"
 
+#define FARNEBACK
+
 class Fbof{
 public:
 	Fbof(){}
@@ -34,7 +36,7 @@ protected:
 	void denoise(const Mat& src, Mat& dst);
 	void backgroundSubtraction(const Mat& frame, Mat& fgMask, Ptr<BackgroundSubtractor> pMOG2);
 	void getOptFlowFeatures(const Mat& motCompMask, const Mat& fgMask, Mat& combinedMask, vector<Point2f>& goodFeaturesToTrack, bool useForegroundFeatures);
-	void opticalFlow(const Mat& prvFr, const Mat& nxtFr, vector<uchar>& status, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& fgMask);
+	void opticalFlow(const Mat& prvFr, const Mat& nxtFr, vector<uchar>& status, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& fgMask, Mat& flow);
 	bool similarVectorEstimation(const DataVec& data1, const DataVec& data2);
 	void similarNeighbourWeighting(const Mat& data, Mat& weights);
 	void optFlowRegularization(const Size& size, const Mat& fgMask, Mat& dst, vector<uchar>& status, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& weights, Mat& data, Mat& weightsEntireFrameMask);
@@ -99,10 +101,9 @@ void Fbof::getOptFlowFeatures(const Mat& motCompMask, const Mat& fgMask, Mat& co
 }
 
 // TODO When performing optical flow on the entire frames (all pixels) instead of goodFeatureToTrack, consider using a larger winSize
-void Fbof::opticalFlow(const Mat& prvFr, const Mat& nxtFr, vector<uchar>& status, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& fgMask){
+void Fbof::opticalFlow(const Mat& prvFr, const Mat& nxtFr, vector<uchar>& status, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& fgMask, Mat& flow){
 	
-	bool usePyrLK = true;
-	if(usePyrLK){
+	#ifndef FARNEBACK
 		TermCriteria termcrit(TermCriteria::COUNT|TermCriteria::EPS,20,0.03);
 		// int ws = 7;
 		int ws = 21;
@@ -118,8 +119,8 @@ void Fbof::opticalFlow(const Mat& prvFr, const Mat& nxtFr, vector<uchar>& status
 			goodFeaturesToTrack(prvFr, prvPts, 500, 0.01, 10, Mat(), 3, 0, 0.04);
 		}
 		calcOpticalFlowPyrLK(prvFr, nxtFr, prvPts, nxtPts, status, err, winSize, 3, termcrit, 0, 0.001);
-	}else{
-		Mat flow;
+	#else
+		// Mat flow;
 		double pyr_scale = 0.5;
 		int levels = 3;
 		int winsize = 15;
@@ -129,13 +130,16 @@ void Fbof::opticalFlow(const Mat& prvFr, const Mat& nxtFr, vector<uchar>& status
 		int flags = 0;
 
 		calcOpticalFlowFarneback(prvFr,nxtFr,flow,pyr_scale,levels,winsize,iterations,poly_n,poly_sigma,flags);
+
+		prvPts.clear();
+		nxtPts.clear();
 		for(int x=0;x<flow.cols;x++){
 		for(int y=0;y<flow.rows;y++){
-			float deltaX = flow.at<OptFlowVec>(y,x)[0];
-			float deltaY = flow.at<OptFlowVec>(y,x)[1];
+			DataVecType deltaX = flow.at<OptFlowVec>(y,x)[0];
+			DataVecType deltaY = flow.at<OptFlowVec>(y,x)[1];
 			if( abs(deltaX)>1 || abs(deltaY)>1 ){
-				prvPts.push_back(Point2f(y,x));
-				nxtPts.push_back(Point2f(y+deltaY,x+deltaX));
+				prvPts.push_back(Point2f(x,y));
+				nxtPts.push_back(Point2f(x+deltaX,y+deltaY));
 			}else{
 				flow.at<OptFlowVec>(y,x)[0] = 0;
 				flow.at<OptFlowVec>(y,x)[1] = 0;
@@ -147,8 +151,7 @@ void Fbof::opticalFlow(const Mat& prvFr, const Mat& nxtFr, vector<uchar>& status
 		split(flow,mv);
 		mv.push_back(Mat::zeros(mv[0].size(),mv[0].type()));
 		merge(mv,flow);
-		io::showImage("Farneback",flow,true);
-	}
+	#endif
 }
 
 bool Fbof::similarVectorEstimation(const DataVec& dataVec1, const DataVec& dataVec2){
@@ -215,58 +218,58 @@ void Fbof::similarNeighbourWeighting(const Mat& data, Mat& weights){
 * Remove exponential weighting in similarNeighbourWeighting
 * TODO add squared vector length to Datavec
 */
-void Fbof::optFlowRegularization(const Size& size, const Mat& fgMask, Mat& dst, vector<uchar>& status, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& weights, Mat& data, Mat& weightsEntireFrameMask){
+void Fbof::optFlowRegularization(const Size& size, const Mat& fgMask, Mat& dst, vector<uchar>& status, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& weights, Mat& dataEntireFrame, Mat& weightsEntireFrameMask){
 
 	float t = 2.0; // Minimum vector size
 	float tSquared = t*t;
 
-	Mat dataWeighting;
+	Mat data;
 	if(std::is_same<DataVecType,short>::value){
-    	data = Mat::zeros(size,CV_16SC3);
-    	dataWeighting = Mat::zeros(size,CV_16SC3);
+    	dataEntireFrame = Mat::zeros(size,CV_16SC3);
 	}else{
-    	data = Mat::zeros(size,CV_32FC3);
-    	dataWeighting = Mat::zeros(size,CV_32FC3);
+    	dataEntireFrame = Mat::zeros(size,CV_32FC3);
     }
+    dataEntireFrame.copyTo(data);
 	weights = Mat::zeros(size,CV_32FC1);
 	Mat weightsEntireFrame = Mat::zeros(size,CV_32FC1);
 
-	bool usePyrLK = true;
-
 	// Optical flow to data
     for(int ptsIdx=0;ptsIdx<prvPts.size();ptsIdx++){
-    	if(!usePyrLK || status[ptsIdx]){
+    	#ifndef FARNEBACK
+    	if(status[ptsIdx]){
+    	#endif
 			DataVecType x1=prvPts[ptsIdx].x,y1=prvPts[ptsIdx].y,x2=nxtPts[ptsIdx].x,y2=nxtPts[ptsIdx].y;
+			Point srcPt = Point((int)x1,(int)y1);
 			DataVecType deltaX = x2-x1;
 			DataVecType deltaY = y2-y1;
+	// 		cout<<deltaX<<" "<<deltaY<<endl;
 			if(vectorLengthSquared(deltaX,deltaY) < tSquared){
 				deltaX = 0;
 				deltaY = 0;
 			}
-			data.at<DataVec>(y1,x1)[0] = ptsIdx;
-			data.at<DataVec>(y1,x1)[1] = deltaX;
-			data.at<DataVec>(y1,x1)[2] = deltaY;
-			if(fgMask.at<uchar>(y1,x1) > 0){
-				dataWeighting.at<DataVec>(y1,x1)[0] = ptsIdx;
-				dataWeighting.at<DataVec>(y1,x1)[1] = deltaX;
-				dataWeighting.at<DataVec>(y1,x1)[2] = deltaY;
+			dataEntireFrame.at<DataVec>(srcPt)[0] = ptsIdx;
+			dataEntireFrame.at<DataVec>(srcPt)[1] = deltaX;
+			dataEntireFrame.at<DataVec>(srcPt)[2] = deltaY;
+			if(fgMask.at<uchar>(srcPt) > 0){
+				data.at<DataVec>(srcPt)[0] = ptsIdx;
+				data.at<DataVec>(srcPt)[1] = deltaX;
+				data.at<DataVec>(srcPt)[2] = deltaY;
 			}
+    	#ifndef FARNEBACK
     	}
+    	#endif
     }
 
 	float weightThreshold = 0.6;
 	uchar convertedThreshold = 255*weightThreshold;
 
     // Weighting for regularization
-	similarNeighbourWeighting(dataWeighting,weights);
-
+	similarNeighbourWeighting(data,weights);
     dst = Mat::ones(size,CV_8UC1);
     weights.convertTo(dst,CV_8UC1,255);
    	threshold(dst,dst,convertedThreshold);
 
-	weightThreshold = .6;
-	convertedThreshold = 255*weightThreshold;
-	similarNeighbourWeighting(data,weightsEntireFrame);
+	similarNeighbourWeighting(dataEntireFrame,weightsEntireFrame);
     weightsEntireFrameMask = Mat::ones(size,CV_8UC1);
     weightsEntireFrame.convertTo(weightsEntireFrameMask,CV_8UC1,255);
    	threshold(weightsEntireFrameMask,weightsEntireFrameMask,convertedThreshold);
@@ -470,6 +473,7 @@ void Fbof::motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motion
 	vector<Point2f> prvPts,nxtPts;
 	Mat data, regulData;
 	Mat prvFrDenoised,fgMask,combMask,maskReg,morphRecMask,morphRecMarker,weights,optFlow,postMotionMask;
+	Mat flowFarneback = Mat::zeros(prvFr.size(),CV_32FC2);
 
 	/* TMP for checking workflow */
 	motionMask = Mat::zeros(prvFr.size(),CV_8UC1);
@@ -490,7 +494,7 @@ void Fbof::motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motion
 		// Optical flow
 		// binMat2Vec(fgMask,prvPts);
 		binMat2Vec(Mat::ones(prvFr.size(),CV_8UC1),prvPts);
-		opticalFlow(prvFr,nxtFr,status,prvPts,nxtPts,fgMask);
+		opticalFlow(prvFr,nxtFr,status,prvPts,nxtPts,fgMask,flowFarneback);
 
 		// Optical flow regularization
 		optFlowRegularization(prvFr.size(),fgMask,maskReg,status,prvPts,nxtPts,weights,data,maskRegEntireFrame);
@@ -514,6 +518,8 @@ void Fbof::motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motion
 	   	/* TR START Checking workflow*
 	   	/* TR END Checking workflow*/
 
+
+	   	/* TR START Checking workflow*/
 		Mat motMaskMorph,motMaskExp;
 		morphologicalReconstruction(morphRecMask,morphRecMarker,motMaskMorph);
 		expandMarker(data,morphRecMask,morphRecMarker,motMaskExp);
@@ -546,7 +552,7 @@ void Fbof::motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motion
 			int width = data.cols, height = data.rows;
 
 			int skip;
-			bool arrows = false;
+			bool arrows = true;
 			if(!arrows) skip = 1; else skip = 5;
 		    for(int x=0;x<width;x+=skip){
 		    for(int y=0;y<height;y+=skip){
@@ -563,23 +569,23 @@ void Fbof::motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motion
 				}
 		    }
 		    }
-		    for(int x=0;x<width;x+=skip){
-		    for(int y=0;y<height;y+=skip){
-		    	if(motionMask.at<uchar>(y,x)>0){
-		    		if(data.at<DataVec>(y,x)[1] > 0 || data.at<DataVec>(y,x)[2] > 0){
-						short newX = x + data.at<DataVec>(y,x)[1];
-						short newY = y + data.at<DataVec>(y,x)[2];
-						if(newX >= 0 && newY >= 0 && newX < width && newY < height){
-			    			if(arrows) arrowedLine(optFlow,Point2f(x,y),Point2f(newX,newY),green,thickness,lineType,shift,tipLength);
-			    			else{
-				    			line(optFlow,Point2f(x,y),Point2f(newX,newY),blue);
-				    			circle(optFlow,Point2f(newX,newY),3,red);
-			    			}
-						}
-					}
-				}
-		    }
-		    }
+		  //   for(int x=0;x<width;x+=skip){
+		  //   for(int y=0;y<height;y+=skip){
+		  //   	if(motionMask.at<uchar>(y,x)>0){
+		  //   		if(data.at<DataVec>(y,x)[1] > 0 || data.at<DataVec>(y,x)[2] > 0){
+				// 		short newX = x + data.at<DataVec>(y,x)[1];
+				// 		short newY = y + data.at<DataVec>(y,x)[2];
+				// 		if(newX >= 0 && newY >= 0 && newX < width && newY < height){
+			 //    			if(arrows) arrowedLine(optFlow2,Point2f(x,y),Point2f(newX,newY),green,thickness,lineType,shift,tipLength);
+			 //    			else{
+				//     			line(optFlow2,Point2f(x,y),Point2f(newX,newY),blue);
+				//     			circle(optFlow2,Point2f(newX,newY),3,red);
+			 //    			}
+				// 		}
+				// 	}
+				// }
+		  //   }
+		  //   }
 
 		    bool saveResults = false;
 			bool resize = true;
@@ -590,7 +596,10 @@ void Fbof::motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motion
 			// io::showImage(name+" Comb Mask",combMask,resize,saveResults);
 			io::showImage(name+" OptFlow1"+postfix,optFlow,resize,saveResults);
 			// io::showImage(name+" OptFlow2"+postfix,optFlow2,resize,saveResults);
-			// io::showImage(name+" Weights"+postfix,weights,resize,saveResults);
+			#ifdef FARNEBACK
+			io::showImage(name+" Farneback"+postfix,flowFarneback,resize,saveResults);
+			#endif
+			io::showImage(name+" Weights"+postfix,weights,resize,saveResults);
 			io::showImage(name+" Weights thresholded"+postfix,maskReg,resize,saveResults);
 			io::showImage(name+" Wei Ent Fr thresholded"+postfix,maskRegEntireFrame,resize,saveResults);
 			// io::showImage(name+" Morph Rec"+postfix,motMaskMorph,resize,saveResults);
@@ -599,7 +608,7 @@ void Fbof::motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motion
 			io::showImage(name+" MR Mask"+postfix,morphRecMask,resize,saveResults);
 			io::showImage(name+" MotionMask"+postfix,motionMask,resize,saveResults);
 			
-			io::showMaskOverlap(fgMask,name+" Foreground Mask",motionMask,name+" MotionMask");
+			// io::showMaskOverlap(fgMask,name+" Foreground Mask",motionMask,name+" MotionMask");
 	    	// io::showMaskOverlap(motionMask,name+" MotionMask",postMotionMask,"PostMotionMask"+postfix);
 		}
 	}
