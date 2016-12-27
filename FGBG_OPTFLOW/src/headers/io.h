@@ -223,6 +223,13 @@ namespace io {
 	    os<<v[i];
 	}
 
+	void openLogFile(const string& name, ofstream& os){
+		string path = DIR_OUTPUT+"log/";
+		makePath(path);
+		string fileName = path+name+"_"+currentDateTime()+".log";
+		os.open(fileName.c_str(),ios::out);
+	}
+
 	void openCsvFile(const string& relPath, const string& name, ofstream& os){
 		string path = DIR_OUTPUT+relPath;
 		makePath(path);

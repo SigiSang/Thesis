@@ -1,5 +1,7 @@
+#include <chrono>
 #include <iomanip>
 #include <pthread.h>
+#include <random>
 #include <sstream>
 using std::stringstream;
 #include <vector>
@@ -16,15 +18,17 @@ using std::queue;
 /** Multithreading helpers **/
 const int MAX_THREADS = 5;
 queue<int> isAvailable;
-#define EVAL_MULTITHREADING 0
+#define EVAL_MULTITHREADING
+ofstream osLog;
 
 /** Initialise iteration parameters **/
 vector<string> lMd = {
-	// FBOF
-	LOBSTER
+	FBOF
+	// ,LOBSTER
 	// ,PAWCS
-	,SUBSENSE
-	,VIBE
+	// ,SUBSENSE
+	// VIBE
+	// ,EFIC
 };
 vector<int> lDs = { // Dataset IDs
 	 ds::CD_BRIDGE_ENTRY
@@ -38,7 +42,7 @@ vector<bool> lPp = {false,true}; // Post-processing
 
 /** Static parameters **/
 bool grayscale = true;
-bool runMotionDetection = false;
+bool runMotionDetection = true;
 bool runCalculateScores = true;
 
 struct thread_data{
@@ -48,6 +52,11 @@ struct thread_data{
 	bool applyPostProcessing;
 	int idx;
 };
+
+void waitRandom(){
+	float sleepTime = 10*rand()/RAND_MAX;        
+    usleep(sleepTime);
+}
 
 void buildPathsOutput(string& pathImgs, string& pathScores, string mdName, string dsName, int noiseStddev, bool applyPostProcessing){
 	stringstream ss;
@@ -70,6 +79,7 @@ void endThread(int idx, MotionDetection* m){
 	isAvailable.push(idx);
 	#ifdef EVAL_MULTITHREADING
 		delete m;
+		waitRandom();
 		pthread_exit(NULL);
 	#endif
 }
@@ -97,33 +107,36 @@ void *run (void* arg){
 	}
 
 	int idx = io::IDX_OUTPUT_START;
+
 	d.next(frame);
-	m->init(frame);
+	if(mdName!=EFIC) m->init(frame);
 
 	string pathImgs, pathScores;
-	buildPathsOutput(pathImgs,pathScores,m->getName(),d.getName(),noiseStddev,applyPostProcessing);
+	buildPathsOutput(pathImgs,pathScores,mdName,d.getName(),noiseStddev,applyPostProcessing);
 
-	if(!io::isDirExist(io::DIR_OUTPUT+pathImgs)){
-		if(runMotionDetection){
-			cout<<"Running motion detection for: "<<pathImgs<<endl;
-			// io::clearOutput(pathImgs);
-			for(; d.hasNext(); idx++){
-				d.next(frame,gt);
-				m->next(frame,motionMask,applyPostProcessing);
+	if(runMotionDetection /*&& !io::isDirExist(io::DIR_OUTPUT+pathImgs)*/){
+		cout<<"Running motion detection for: "<<pathImgs<<endl;
+		for(; d.hasNext(); idx++){
+			d.next(frame,gt);
+			m->next(frame,motionMask,applyPostProcessing);
 
-				// Build img filename
-				char bufferImgName[10];
-				sprintf(bufferImgName,io::REGEX_IMG_OUTPUT.c_str(),idx);
-				io::saveImage(pathImgs,string(bufferImgName),motionMask);
-			}
-			cout<<"Finished motion detection for: "<<pathImgs<<endl;
+			// Build img filename
+			char bufferImgName[10];
+			sprintf(bufferImgName,io::REGEX_IMG_OUTPUT.c_str(),idx);
+			io::saveImage(pathImgs,string(bufferImgName),motionMask);
 		}
+		cout<<"Finished motion detection for: "<<pathImgs<<endl;
 	}
 
 	if(runCalculateScores){
-		cout<<"Running score calculation for: "<<pathImgs<<endl;
-		d.calculateScores(pathImgs,pathScores);
-		cout<<"Finished score calculation for: "<<pathImgs<<endl;
+		if(!io::isDirExist(io::DIR_OUTPUT+pathImgs)){
+			osLog<<"No output for "<<pathImgs<<endl;
+			cout<<"No output for "<<pathImgs<<endl;
+		}else{
+			cout<<"Running score calculation for: "<<pathImgs<<endl;
+			d.calculateScores(pathImgs,pathScores);
+			cout<<"Finished score calculation for: "<<pathImgs<<endl;
+		}
 	}
 
 	endThread(threadIdx,m);
@@ -135,6 +148,7 @@ int main(){
 	for(int i=0;i<MAX_THREADS;i++){
 		isAvailable.push(i);
 	}
+	if(runCalculateScores) io::openLogFile("Calculate_scores", osLog);
 
 	for(int mdIdx=0;mdIdx<lMd.size();mdIdx++){
 	for(int dsIdx=0;dsIdx<lDs.size();dsIdx++){
@@ -171,5 +185,6 @@ int main(){
 	}
 
 	pthread_exit(NULL);
+	osLog.close();
 	return 0;
 }

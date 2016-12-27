@@ -1,0 +1,4 @@
+#!/bin/bash
+./backup_fbof_data
+./move_datasheets
+./reformat_data

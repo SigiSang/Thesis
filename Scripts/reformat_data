@@ -1,0 +1,34 @@
+#!/bin/bash
+main_dir="/media/tim/Game drive/Data_thesis/output/datasheets"
+src="$main_dir/raw_data"
+dst1="$main_dir/raw_data_db"
+dst2="$main_dir/raw_data_avgs"
+
+# for m in {efic,fbof,lobster,subsense,vibe}; do
+m=fbof
+for p in {wo,w}; do
+for n in {000..030..10}; do
+for d in {bridgeEntry,busyBoulvard,fluidHighway,streetCornerAtNight,tramStation,winterStreet}; do
+
+	file="${m}_$p-pospro_noise-${n}_$d.csv"
+	file_src="$src/$file"
+	file_dst1="$dst1/$file"
+	file_dst2="$dst2/$file"
+	
+	if [ ! -e "$file_src" ]; then echo "Warning: file not found: $file_src" >&2; continue; fi
+	if [ ! -e "$file_dst1" ]; then touch "$file_dst1"; else if [ $m != "fbof" ]; then continue; fi; fi
+	if [ ! -e "$file_dst2" ]; then touch "$file_dst2"; fi
+
+	tmp=$(mktemp)
+	
+	tail -n +2 "$file_src" > $tmp
+	head -n -6 $tmp > "$file_dst1"
+
+	tail -n -5 $tmp > "$file_dst2"
+	
+	rm $tmp
+
+done;
+done;
+done;
+# done;

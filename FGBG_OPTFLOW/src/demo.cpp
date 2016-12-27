@@ -22,7 +22,8 @@ int main(int argc,char **argv){
 	Mat motMask;
 	Mat motMask2;
 	// int DS_ID = ds::CD_BRIDGE_ENTRY;
-	int DS_ID = ds::MISC_test;
+	// int DS_ID = ds::MISC_test;
+	int DS_ID = ds::CD_TRAMSTATION;
 	bool grayscale = true;
 	ds::Dataset d;
 	ds::loadDataset(d,DS_ID,grayscale);
@@ -31,7 +32,7 @@ int main(int argc,char **argv){
 	bool firstFrame = true;
 	bool applyPostProcessing = false;
 	bool applyNoise = true;
-	bool resize = false;
+	bool resize = true;
 	string nameMd1,nameMd2;
 	while(d.hasNext()){
 		if(hasGT){
@@ -45,17 +46,17 @@ int main(int argc,char **argv){
 		if(applyNoise) addNoise(img,img);
 		io::showImage("Input",img,resize);
 		if(firstFrame){
-			md = new MdFbof(img); nameMd1 = "FBOF";
+			md = new MdFbof(img); nameMd1 = "Improved BgS & OF";
 			// md = new MdLobster(img); nameMd1 = "Lobster";
 			// md = new MdPawcs(img); nameMd2 = "PAWCS";
-			md2 = new MdSubsense(img); nameMd2 = "SuBSENSE";
+			// md2 = new MdSubsense(img); nameMd2 = "SuBSENSE";
 			// md2 = new MdVibe(img); nameMd2 = "ViBe+";
 
 			firstFrame = false;
 		}else{
 			md->next(img,motMask,applyPostProcessing);
 			io::showImage(nameMd1,motMask,resize);
-			if(md2){
+			if(md2!=nullptr){
 				md2->next(img,motMask2,applyPostProcessing);
 				io::showImage(nameMd2,motMask2,resize);
 			}

@@ -44,19 +44,19 @@ int main (int argc, char** argv){
 
 	short morpRecRadius = 2; // radius for morphological reconstruction
 	bool useRegionExpansion;
-	bool applyPostProcessing = false;
+	bool applyPostProcessing = true;
 	bool showResults = true;
 	bool useDenoising = false;
 	bool useForegroundFeatures = true;
 
 	bool showSrc = true;
-	/**/
+	/**
 	bool withOriginal = false;
 	bool withNoisy = true;
 	/**
 	bool withOriginal = true;
 	bool withNoisy = false;
-	/**
+	/**/
 	bool withOriginal = true;
 	bool withNoisy = true;
 	/**/

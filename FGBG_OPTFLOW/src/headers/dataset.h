@@ -12,6 +12,8 @@ using std::vector;
 #include <opencv2/opencv.hpp>
 using namespace cv;
 
+#include <glob.h>
+
 #include "io.h"
 
 namespace ds{
@@ -108,6 +110,16 @@ namespace ds{
 				cerr<<"datasets.h : Dataset.calculateScores() : Trying to calculate scores for dataset without GT!"<<endl;
 				throw;
 			}
+
+			string pattern=io::DIR_OUTPUT+pathScores+dsName+"*.csv";
+			glob_t glob_result;
+			int ret = glob(pattern.c_str(),GLOB_PERIOD,NULL,&glob_result);
+			if(glob_result.gl_pathc>0){
+				cout<<"Skipping                      "<<pathScores+dsName<<endl;
+				globfree(&glob_result);
+				return;
+			}
+			globfree(&glob_result);
 
 			VideoCapture vcOutput(io::DIR_OUTPUT+pathImgs+io::REGEX_IMG_OUTPUT);
 

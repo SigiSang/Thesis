@@ -1,0 +1,37 @@
+Hoofdopmerkingen presentatie 20-12-2016:
+-gebruik van onrealistisch niveau ruis
+-noise estimation bekijken en toepassen (lange baan)
+-probleemstelling:
+	Het probleem is weinig van toepassing op moderne camera's, zoek naar informatie rond ruisproblemen bij verkeerscamera's ed.
+	Verklaar dat het niet eenvoudig is geannoteerde datasets te vinden, en dat er geen gevonden konden worden met het specifieke probleem van deze thesis (CD.net bevat wel nachtvideos, maar deze lijken nog steeds behoorlijk verlicht en zijn meer gefocusd op omgaan met 'flares' door sterk lichtcontrast, zoals vermeld op de website zelf). Er werd wel zelf een dataset geproduceerd binnen het probleemkader, maar hier kon geen grondwaarheid bij gemaakt worden voor een kwantitatieve vergelijking.
+
+
+TODO
+----
+Datacalculatie:
++uitvoer eigen algoritme maken
++datacalculatie voor resterende algoritmen maken
++macro voor importeren csv's maken
+-data verwerken in grafieken
+	-ranking berekenen
+	-wat hoe tonen?
+		-ranking (bars) per methode
+			-per dataset
+			-gemiddeld
+
+Boek:
+-algoritme volledig beschrijven
+	-parameters BgSeg & OptFlo verklaren (evt future work, parameters itereren)
+	-verschillen (beter/slechter) met andere state of the art aantonen en uitleggen
+	-is alles reproduceerbaar?
+-probleemstelling beter uitwerken zodat probleem reël overkomt
+-problemen met datasets beter uitleggen
+-state of the art bespreken
+-resultaten bespreken
+-ruis estimatie bespreken?
+-remaining problems & future work:
+	-smaller movement are not always detected and object shapes are often irregular in time
+		=> pass regularized motion vectors & motion compensated motion mask to use temporal redundancy
+			*pass previous regularized motion vectors to optical flow algorithm
+			*bitwise_or add motion compensated motion mask to MR mask
+

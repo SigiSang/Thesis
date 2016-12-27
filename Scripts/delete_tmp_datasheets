@@ -1,0 +1,16 @@
+#!/bin/bash
+cd "/media/tim/Game drive/Data_thesis/output/datasets/"
+# for m in {efic,fbof,lobster,subsense,vibe}; do
+m=fbof
+for p in {wo,w}; do
+for n in {000..030..10}; do
+for d in {bridgeEntry,busyBoulvard,fluidHighway,streetCornerAtNight,tramStation,winterStreet}; do
+	dir="$m/$p-pospro_noise-$n";
+	files=($(ls $dir/$d*.csv 2>/dev/null))
+	for f in $files; do
+		rm $f;
+	done;
+done;
+done;
+done;
+# done;

@@ -1,0 +1,23 @@
+- typically the introduction is in the form of a "problem" statement that you subsequently "solve". A really nice way to do this is to start with a 'fun' illustration of the problem, at the very beginning of your presentation, even before your slide 2 with the overview. E.g. show a noisy video, say that many methods break down when tracking motion in some videos and show a picture of some industries where motion tracking is important (e.g. traffic cams) you can even go as far as to show traffic accident statistics to illustrate the importance of your work.
+
++ it won't hurt to mention that heavy noise + low-light conditions = low SNR
+
+- when you explain motion detection and estimation (slide 5-8), also refer to other state of the art (what other methods exist?) and WHY you illustrate with the methods that you use (instead of other methods from the state of the art)
+
++ are you planning on explaining Farneback a bit more? Just putting the word on the slide will raise more questions and confusion than it answers, best is to use animation or illustration to show the concept (but don't spend too much presentation time on this)
+
++ the slide on morphological reconstruction seems disconnected from the rest of the presentation. You should ask yourself: Why am I using morphological reconstruction? What part of the problem does it solve? And then once you answer these questions, you will find the best place in your presentation to introduce it (i.e. by way of the problem it is intended to solve)
+
++ In my opinion, slide 9 and 10 are actually part of the problem statement, they define the problem of noise, so you should explain these earlier (before your methods). Also: is slide 10 about Bayer arrays relevant? In the end you didn't do any specific work on Bayer arrays, so it's probably not useful to dedicate an entire slide to it (you can mention it in passing or show it as one of many reasons why there is noise)
+
++ slide 13: I like your block schematic, but I don't like the text you have next to it because it is redundant. For example: The most enigmatic block is "similar neighbour weights", and the text on the left just says "similar neighbour weighting", this has little added value. Rather I would think about it this way: The block schematic explains WHAT you do, the text can explain WHY you do it.
+
+-slide 15: again, you explain quite well WHAT you do (remove foreground that does not present consistent motion), but not WHY you do it (what your intention is). An explanation of WHY could be something like this: "we first generate a foreground mask, but this will have many errors because of the noise and the simplicity of the FG/BG model. We accept this and make sure that the errors favor many false positives (to make sure that we don't miss any motion). Then we intend to increase robustness by checking the following hypothesis: if a foreground object is true movement and not a false positive, the pixels will all show consistency in their detected motion vectors." Only once you explain this basic idea, the audience will be able to understand the steps you explain in slide 15 and 16. 
+
+-slide 18: similar story, don't forget to explain what is the idea behind doing bitwise AND? E.g.  "the hypothesis is that only true motion will be detected as foreground AND will have high weights at the same time (as this corresponds to consistent motion)". When you explain it like this, the obvious question may come: "what about consistent motion that is NOT detected as foreground?" which is why I suggested this idea of iterating your method or considering the full optical flow at a later stage in your algorithm. What you could do with potential audience questions like this is discuss them as future work or include a hidden slide in case the question comes.
+
++ slide 20: a demo is cool, but make sure it works! test it on beforehand
+
+-I'm missing a result section, if I remember correctly you have already done some experiments (e.g. with adding noise yourself) and comparisons to other methods? Don't consider a result section an afterthought, it's important to clearly explain what and why you did some experiments.
+
+-include a conclusion at the end (i.e. answer the question: have you solved the problem?), and discuss future work!

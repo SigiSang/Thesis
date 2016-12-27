@@ -1,0 +1,18 @@
+#!/bin/bash
+cd "/media/tim/Game drive/Data_thesis/output/"
+dir_sets="datasets";
+dir_sheets="datasheets/raw_data";
+# for m in {efic,fbof,lobster,subsense,vibe}; do
+m=fbof
+for p in {wo,w}; do
+for n in {000..030..10}; do
+for d in {bridgeEntry,busyBoulvard,fluidHighway,streetCornerAtNight,tramStation,winterStreet}; do
+	dir="$dir_sets/$m/$p-pospro_noise-$n";
+	fn=$(ls $dir/$d*.csv 2>/dev/null | sort -r | head -1)
+	if [ $fn ]; then
+		mv -f $fn $dir_sheets/${m}_$p-pospro_noise-${n}_$d.csv;
+	fi;
+done;
+done;
+done;
+# done;

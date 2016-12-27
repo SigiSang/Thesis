@@ -1,0 +1,12 @@
+BgSegm (MoG) -> FgMask M_bs 									-> fgMask
+OptFlow (Dense Farneback) -> MotVecs V_dof						-> prvPts
+OptFlow Regularization:
+	Filter out small vectors : replace with (0,0)				-> data
+	Similar Neighbour Weighting with non-zero vectors
+		(switch to circular radius instead of square)
+	Threshold weights at t=0.6 -> Mask M_snw & mask M_snwEF		-> maskRef & maskRegEntireFrame
+	Morphological reconstruction
+		marker 	: M_snw 										-> morphRecMarker
+		mask 	: OR(M_bs,M_snwEF)								-> morphRecMask
+		-> motion mask M_mm										-> motionMask
+Post-processing

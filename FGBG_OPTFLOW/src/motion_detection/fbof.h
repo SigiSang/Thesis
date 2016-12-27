@@ -458,11 +458,18 @@ void Fbof::applyMotion(const Mat& src, const Mat& regulData, Mat& dst){
 // }
 
 void Fbof::postProcessing(Mat& img){
-   	int strucSize = 3;
-	Mat struc = getStructuringElement(MORPH_ELLIPSE,Size(5,5));
-   	medianBlur(img,img,strucSize);
+	/**
+   	int sizeMedBlur = 3;
+   	int sizeMorph = 5;
+   	/**/
+   	int sizeMedBlur = 7;
+   	int sizeMorph = 9;
+   	/**/
+	Mat struc = getStructuringElement(MORPH_ELLIPSE,Size(sizeMorph,sizeMorph));
+   	medianBlur(img,img,sizeMedBlur);
 	morphologyEx(img,img,MORPH_CLOSE,struc);
 	morphologyEx(img,img,MORPH_OPEN,struc);
+	morphologyEx(img,img,MORPH_CLOSE,struc);
 }
 
 void Fbof::motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motionMask, bool usePostProcessing, bool onlyUpdateBGModel=false, bool useRegExpansion=false){
@@ -489,6 +496,8 @@ void Fbof::motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motion
 
 	if(!onlyUpdateBGModel){
 
+		fgMask.copyTo(motionMask);
+	   	/* TR START Checking workflow*
 		Mat maskRegEntireFrame;
 
 		// Optical flow
@@ -515,17 +524,16 @@ void Fbof::motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motion
 	   		// Morphological reconstruction by region expansion
 		   	expandMarker(data,morphRecMask,morphRecMarker,motionMask);
 	   	}
-	   	/* TR START Checking workflow*
 	   	/* TR END Checking workflow*/
 
 
-	   	/* TR START Checking workflow*/
+	   	/* TR START Checking workflow*
 		Mat motMaskMorph,motMaskExp;
 		morphologicalReconstruction(morphRecMask,morphRecMarker,motMaskMorph);
 		expandMarker(data,morphRecMask,morphRecMarker,motMaskExp);
 		// cout<<"Morph vs Exp"<<endl;
 		// io::printScores(motMaskMorph,motMaskExp);
-	    io::showMaskOverlap(motMaskMorph,"Morph",motMaskExp,"Exp"); /**/
+	    // io::showMaskOverlap(motMaskMorph,"Morph",motMaskExp,"Exp"); /**/
 
 	   	if(usePostProcessing){
 	   		postProcessing(motionMask);
@@ -538,7 +546,7 @@ void Fbof::motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motion
 		// motionCompensation(motionMask,motCompMask,regulData);
 
    		if(showResults){
-			// Draw optical flow motion vectors
+			/* Draw optical flow motion vectors *
 			Mat optFlow2;
     		prvFr.copyTo(optFlow);
     		prvFr.copyTo(optFlow2);
@@ -586,27 +594,29 @@ void Fbof::motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motion
 				// }
 		  //   }
 		  //   }
+		  	/**/
 
-		    bool saveResults = false;
+		    bool saveResults = true;
 			bool resize = true;
 			string postfix = "";
 			// postfix = useDenoising? " w den" : " wo den";-
+			// io::showImage(name+" Source"+postfix,prvFr,resize,saveResults);
 			// if(useDenoising) io::showImage(name+" Denoised"+postfix,prvFrDenoised,resize,saveResults);
-			io::showImage(name+" Foreground Mask"+postfix,fgMask,resize,saveResults);
+			// io::showImage(name+" Foreground Mask"+postfix,fgMask,resize,saveResults);
 			// io::showImage(name+" Comb Mask",combMask,resize,saveResults);
-			io::showImage(name+" OptFlow1"+postfix,optFlow,resize,saveResults);
+			// io::showImage(name+" OptFlow1"+postfix,optFlow,resize,saveResults);
 			// io::showImage(name+" OptFlow2"+postfix,optFlow2,resize,saveResults);
-			#ifdef FARNEBACK
-			io::showImage(name+" Farneback"+postfix,flowFarneback,resize,saveResults);
-			#endif
-			io::showImage(name+" Weights"+postfix,weights,resize,saveResults);
-			io::showImage(name+" Weights thresholded"+postfix,maskReg,resize,saveResults);
-			io::showImage(name+" Wei Ent Fr thresholded"+postfix,maskRegEntireFrame,resize,saveResults);
+			// #ifdef FARNEBACK
+			// io::showImage(name+" Farneback"+postfix,flowFarneback,resize,saveResults);
+			// #endif
+			// io::showImage(name+" Weights"+postfix,weights,resize,saveResults);
+			// io::showImage(name+" Weights thresholded"+postfix,maskReg,resize,saveResults);
+			// io::showImage(name+" Wei Ent Fr thresholded"+postfix,maskRegEntireFrame,resize,saveResults);
 			// io::showImage(name+" Morph Rec"+postfix,motMaskMorph,resize,saveResults);
 			// io::showImage(name+" Expansion"+postfix,motMaskExp,resize,saveResults);
-			io::showImage(name+" MR Marker"+postfix,morphRecMarker,resize,saveResults);
-			io::showImage(name+" MR Mask"+postfix,morphRecMask,resize,saveResults);
-			io::showImage(name+" MotionMask"+postfix,motionMask,resize,saveResults);
+			// io::showImage(name+" MR Marker"+postfix,morphRecMarker,resize,saveResults);
+			// io::showImage(name+" MR Mask"+postfix,morphRecMask,resize,saveResults);
+			// io::showImage(name+" MotionMask"+postfix,motionMask,resize,saveResults);
 			
 			// io::showMaskOverlap(fgMask,name+" Foreground Mask",motionMask,name+" MotionMask");
 	    	// io::showMaskOverlap(motionMask,name+" MotionMask",postMotionMask,"PostMotionMask"+postfix);

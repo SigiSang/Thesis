@@ -16,6 +16,7 @@ const string LOBSTER = "lobster";
 // const string PAWCS = "pawcs";
 const string SUBSENSE = "subsense";
 const string VIBE = "vibe";
+const string EFIC = "efic";
 
 class MotionDetection{
 public:
@@ -48,7 +49,7 @@ protected:
 };
 
 void MdFbof::init(Mat& firstFr){
-	destroy();
+	// destroy();
 	name = FBOF;
 	fbof = new Fbof("FgBg-OptFlow");
 	firstFr.copyTo(prvFr);

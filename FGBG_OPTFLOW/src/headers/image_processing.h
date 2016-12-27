@@ -16,7 +16,7 @@ using namespace cv;
 typedef Vec<int,4> Point4i;
 
 const double NOISE_STDDEV_MIN = 0.0;
-const double NOISE_STDDEV_MAX = 100.0;
+const double NOISE_STDDEV_MAX = 30.0;
 const double NOISE_STDDEV_INC = 10.0;
 
 /* Unused */
@@ -81,7 +81,7 @@ void postProcessing(Mat& src, Mat& dst, int strucSize, int morphOp=MORPH_OPEN){
 }
 
 typedef Vec<short,3> Vec3;
-void addNoise(Mat& src, Mat& dst, double stddev=50.0){
+void addNoise(Mat& src, Mat& dst, double stddev=20.0){
 	int chan = src.channels();
 	int typeNoise = CV_16SC(chan);
 
