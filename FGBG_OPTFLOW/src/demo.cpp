@@ -22,7 +22,7 @@ int main(int argc,char **argv){
 	Mat motMask;
 	Mat motMask2;
 	// int DS_ID = ds::CD_BRIDGE_ENTRY;
-	// int DS_ID = ds::MISC_test;
+	// int DS_ID = ds::MISC_test2;
 	int DS_ID = ds::CD_TRAMSTATION;
 	bool grayscale = true;
 	ds::Dataset d;

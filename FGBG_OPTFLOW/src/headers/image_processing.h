@@ -81,7 +81,7 @@ void postProcessing(Mat& src, Mat& dst, int strucSize, int morphOp=MORPH_OPEN){
 }
 
 typedef Vec<short,3> Vec3;
-void addNoise(Mat& src, Mat& dst, double stddev=20.0){
+void addNoise(Mat& src, Mat& dst, double stddev=30.0){
 	int chan = src.channels();
 	int typeNoise = CV_16SC(chan);
 

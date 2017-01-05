@@ -1,4 +1,5 @@
 #!/bin/bash
-./backup_fbof_data
+cd "$(dirname "$0")"
 ./move_datasheets
+./backup_fbof_data
 ./reformat_data

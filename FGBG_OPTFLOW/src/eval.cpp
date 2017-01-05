@@ -116,6 +116,7 @@ void *run (void* arg){
 
 	if(runMotionDetection /*&& !io::isDirExist(io::DIR_OUTPUT+pathImgs)*/){
 		cout<<"Running motion detection for: "<<pathImgs<<endl;
+		io::clearOutput(pathImgs);
 		for(; d.hasNext(); idx++){
 			d.next(frame,gt);
 			m->next(frame,motionMask,applyPostProcessing);

@@ -1,6 +1,7 @@
 #!/bin/bash
 src="/media/tim/Game drive/Data_thesis/output/datasheets/raw_data"
-stamp=$(date +"%d-%m-%Y.%T")
+stamp=$(date +"%Y-%m-%d.%T")
 
 cd "$src"
 tar -czf "backup/fbof_data_$stamp.tar.gz" fbof*.csv
+nemo "$src/backup/"

@@ -21,7 +21,7 @@ namespace dn {
 	const short DEN_NL_MEANS = 4;
 	// const short DEN_ZLOKOLICA = 5;
 
-	const int ksize = 3;
+	const int ksize = 7;
 
 	void blur(const Mat& src, Mat& dst){
 		Size kernelSize = Size(ksize,ksize);

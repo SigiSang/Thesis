@@ -57,11 +57,19 @@ for $d (@ds){
 	for my $i (0..@heads-1){
 		my $c = "$colLet[$i]";
 		my $col = $i+2; # +1 voor 1-index, +1 voor extra fnc kolom
-		$stat->[$i] = {
-			 sum => "SUM($ref$c:$c)"
-			,cnt => "COUNT($ref$c:$c)"
-			,avg => "INDIRECT(ADDRESS(ROW()-2,$col,1)) / INDIRECT(ADDRESS(ROW()-1,$col,1))"
-		};
+
+		if($heads[$i] eq 'FPR'){ # special format for FPR
+			$stat->[$i] = {
+				 sum => "INDIRECT(ADDRESS(ROW(),COLUMN()-4))/(INDIRECT(ADDRESS(ROW(),COLUMN()-4))+INDIRECT(ADDRESS(ROW(),COLUMN()-5)))"
+				,cnt => "INDIRECT(ADDRESS(ROW(),COLUMN()-1))"
+			};
+		}else{
+			$stat->[$i] = {
+				 sum => "SUM($ref$c:$c)"
+				,cnt => "COUNT($ref$c:$c)"
+			};
+		}
+		$stat->[$i]->{avg} = "INDIRECT(ADDRESS(ROW()-2,$col,1)) / INDIRECT(ADDRESS(ROW()-1,$col,1))";
 	}
 	$stats->{$m}->{$p}->{$n}->{$d} = $stat;
 }

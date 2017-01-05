@@ -27,9 +27,12 @@ int main (int argc, char** argv){
 
 	/* Motion detection configuration */
 	ds::Dataset dataset;
-	// const int VID_ID = ds::CD_STREETCORNER , skipToFrame = 865;
+	// const int VID_ID = ds::CD_BRIDGE_ENTRY , skipToFrame = 1000;
+	// const int VID_ID = ds::CD_BUSY_BOULEVARD , skipToFrame = 730;
+	// const int VID_ID = ds::CD_STREETCORNER , skipToFrame = 80; // 865;
 	const int VID_ID = ds::CD_TRAMSTATION, skipToFrame = 30;
 	// const int VID_ID = ds::CD_TRAMSTATION, skipToFrame = 590;
+	// const int VID_ID = ds::CD_WINTERSTREET, skipToFrame = 0;
 	// const int VID_ID = ds::AVSS_SHORT, skipToFrame = 0;
 	// const int VID_ID = ds::MISC_3, skipToFrame = 200;
 	// const int VID_ID = ds::MISC_test2, skipToFrame = 0;
@@ -53,10 +56,10 @@ int main (int argc, char** argv){
 	/**
 	bool withOriginal = false;
 	bool withNoisy = true;
-	/**
+	/**/
 	bool withOriginal = true;
 	bool withNoisy = false;
-	/**/
+	/**
 	bool withOriginal = true;
 	bool withNoisy = true;
 	/**/

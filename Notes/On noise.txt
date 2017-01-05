@@ -1,0 +1,20 @@
+low-light noise == shot noise && read noise
+
+Wikipedia:
+----------
+In low light, correct exposure requires the use of slow shutter speed (i.e. long exposure time), higher gain (ISO sensitivity), or both. On most cameras, slower shutter speeds lead to increased salt-and-pepper noise due to photodiode leakage currents. At the cost of a doubling of read noise variance (41% increase in read noise standard deviation), this salt-and-pepper noise can be mostly eliminated by dark frame subtraction. Banding noise, similar to shadow noise, can be introduced through brightening shadows or through color-balance processing.
+The relative effect of both read noise and shot noise increase as the exposure is reduced, corresponding to increased ISO sensitivity, since fewer photons are counted (shot noise) and since more amplification of the signal is necessary.
+
+Most algorithms for converting image sensor data to an image, whether in-camera or on a computer, involve some form of noise reduction. There are many procedures for this, but all attempt to determine whether the actual differences in pixel values constitute noise or real photographic detail, and average out the former while attempting to preserve the latter. However, no algorithm can make this judgment perfectly, so there is often a tradeoff made between noise removal and preservation of fine, low-contrast detail that may have characteristics similar to noise. Many cameras have settings to control the aggressiveness of the in-camera noise reduction. (K J Sreeja & Prudhvi Raj Budumuru (2003) http://www.ijera.com/papers/Vol3_issue6/CG36496501.pdf)
+
+Read noise:
+-----------
+http://www.andor.com/learning-academy/read-noise-understanding-scmos-read-noise
+
+Shot noise:
+-----------
+http://optical-technologies.info/shot-noise/
+
+Image sensors, CCD vs CMOS
+--------------------------
+http://electronics.howstuffworks.com/cameras-photography/digital/question362.htm

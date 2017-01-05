@@ -1,6 +1,6 @@
 Hoofdopmerkingen presentatie 20-12-2016:
 -gebruik van onrealistisch niveau ruis
--noise estimation bekijken en toepassen (lange baan)
+-noise estimation bekijken en toepassen (lange baan == nowpsies)
 -probleemstelling:
 	Het probleem is weinig van toepassing op moderne camera's, zoek naar informatie rond ruisproblemen bij verkeerscamera's ed.
 	Verklaar dat het niet eenvoudig is geannoteerde datasets te vinden, en dat er geen gevonden konden worden met het specifieke probleem van deze thesis (CD.net bevat wel nachtvideos, maar deze lijken nog steeds behoorlijk verlicht en zijn meer gefocusd op omgaan met 'flares' door sterk lichtcontrast, zoals vermeld op de website zelf). Er werd wel zelf een dataset geproduceerd binnen het probleemkader, maar hier kon geen grondwaarheid bij gemaakt worden voor een kwantitatieve vergelijking.
@@ -13,25 +13,75 @@ Datacalculatie:
 +datacalculatie voor resterende algoritmen maken
 +macro voor importeren csv's maken
 -data verwerken in grafieken
-	-ranking berekenen
 	-wat hoe tonen?
 		-ranking (bars) per methode
-			-per dataset
+			-per dataset (enkel bepaalde?)
 			-gemiddeld
+-roc curves voor eigen parameters maken
+	-eval adaptatie: voor fbof met variërende parameters Recall en FPR berekenen
+		-verschillende iteraties doen: telkens kleinere precisie tot weinig variatie meer
+			-begin met 1 iteratie per parameter en zie of een parameter een andere beïnvloed
+	-roc curves maken adhv Recall en FPR (Wikipedia)
 
 Boek:
 -algoritme volledig beschrijven
-	-parameters BgSeg & OptFlo verklaren (evt future work, parameters itereren)
-	-verschillen (beter/slechter) met andere state of the art aantonen en uitleggen
+	-parameters BgSeg & OptFlo verklaren
+		(onderzoek kort welk effect de parameter heeft en welke waarde best past bij zwart-wit, donkere beelden)
 	-is alles reproduceerbaar?
+	-illustraties toevoegen
 -probleemstelling beter uitwerken zodat probleem reël overkomt
 -problemen met datasets beter uitleggen
+	-weinig ruis, mogelijk verlaagde resolutie (bron van videos?)
+	-meer van toepassing op goedkope of oude camera's > verkeerscamera's
+		-zoek data rond gebruikte camera's en kwaliteit (CMOS? = goedkoper,gevoeliger aan ruis)
+	-probleem aangetoond met video van oude webcam
+		> video overdag maken, verschil aantonen
+			> id straat, hoeft enkel ter vergelijking van kwaliteit te zijn
 -state of the art bespreken
 -resultaten bespreken
+	-verschillen (beter/slechter) met andere state-of-the-art aantonen en uitleggen
 -ruis estimatie bespreken?
 -remaining problems & future work:
-	-smaller movement are not always detected and object shapes are often irregular in time
+	- improvement on morphological reconstruction: using optical flow vectors on entire frame
+		>> expand on pixel having a motion vector similar to the REGULARISED vector
+			- expanding on pixels having similar vector to vector of current pixel performs bad here because the iteratively similar vectors gradually deviated from the intented correct vector which is originally expanded from.
+	-smaller movements are not always detected and object shapes are often irregular in time
 		=> pass regularized motion vectors & motion compensated motion mask to use temporal redundancy
 			*pass previous regularized motion vectors to optical flow algorithm
-			*bitwise_or add motion compensated motion mask to MR mask
+			*bitwise_or add motion compensated motion mask to MR mask ==> did not work, left trail
+	-double images == no movement
+		=> if optical flow empty, do motionMask = AND(fgMask,previous motCompMask)
+-short abstract (<-> extended abstract?)
+-inleiding
+-besluit
+-dankwoord
+-...
 
+05/01
+-----
+-algoritme uitschrijven
+	-input wordt geconverteerd naar grayscale
+	-similar neighbour weighting : enkel voor pixels in FgMask
+	-refereren naar illustraties in tekst
+-nieuwe run fbof:
+	-wo OFEF & applyMotion, pos pro: large closing
+-problem statement aanpassen
+	-noise beter uitschrijven
+	-duiden naar goedkope hardware, minder van toepassing op moderne camera's (software correctie)
+		-> data typische hardware verkeerscamera's
+	-...
+==>> Verzenden om te laten nalezen
+-related work
+	-efic
+	-lobster
+	-subsense
+	-vibe
+-data tabellen en grafieken maken => tonen wat je gedaan hebt
+-gedane werk?
+	-literatuurstudie (zie read & shot noise)
+	-teststructuur opgezet
+	-algoritme ontwikkeld
+	-evaluatiestructuur opgezet
+	-data verwerkt (tabellen & grafieken)
+	-resultaten verwerkt
+-future work
