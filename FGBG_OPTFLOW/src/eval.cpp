@@ -38,6 +38,7 @@ vector<int> lDs = { // Dataset IDs
 	,ds::CD_TRAMSTATION
 	,ds::CD_WINTERSTREET
 };
+// vector<bool> lPp = {false,true}; // Post-processing
 vector<bool> lPp = {false,true}; // Post-processing
 
 /** Static parameters **/
@@ -114,9 +115,9 @@ void *run (void* arg){
 	string pathImgs, pathScores;
 	buildPathsOutput(pathImgs,pathScores,mdName,d.getName(),noiseStddev,applyPostProcessing);
 
-	if(runMotionDetection /*&& !io::isDirExist(io::DIR_OUTPUT+pathImgs)*/){
+	if( runMotionDetection && (mdName==FBOF || !io::isDirExist(io::DIR_OUTPUT+pathImgs)) ){
 		cout<<"Running motion detection for: "<<pathImgs<<endl;
-		io::clearOutput(pathImgs);
+		// io::clearOutput(pathImgs);
 		for(; d.hasNext(); idx++){
 			d.next(frame,gt);
 			m->next(frame,motionMask,applyPostProcessing);

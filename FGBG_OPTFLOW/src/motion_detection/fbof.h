@@ -55,7 +55,7 @@ protected:
 void Fbof::init(){
 	int history = 500;
 	double varThreshold = 16;
-	bool detectShadows=false;
+	bool detectShadows=true;
 	pMOG2 = createBackgroundSubtractorMOG2(history,varThreshold,detectShadows);
 }
 
@@ -106,6 +106,15 @@ void Fbof::getOptFlowFeatures(const Mat& motCompMask, const Mat& fgMask, Mat& co
 
 // TODO When performing optical flow on the entire frames (all pixels) instead of goodFeatureToTrack, consider using a larger winSize
 void Fbof::opticalFlow(const Mat& prvFr, const Mat& nxtFr, vector<uchar>& status, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& fgMask, Mat& flow){
+	Mat prvFrGrey, nxtFrGrey;
+	prvFr.copyTo(prvFrGrey);
+	nxtFr.copyTo(nxtFrGrey);
+	if(prvFr.channels()>1){
+		cvtColor(prvFrGrey, prvFrGrey, COLOR_BGR2GRAY);
+	}
+	if(prvFr.channels()>1){
+		cvtColor(nxtFrGrey, nxtFrGrey, COLOR_BGR2GRAY);
+	}
 	
 	#ifndef FARNEBACK
 		TermCriteria termcrit(TermCriteria::COUNT|TermCriteria::EPS,20,0.03);
@@ -116,24 +125,24 @@ void Fbof::opticalFlow(const Mat& prvFr, const Mat& nxtFr, vector<uchar>& status
 
 		if(prvPts.empty()){
 			// cout<<"Fg Mask"<<endl;
-			goodFeaturesToTrack(prvFr, prvPts, 500, 0.01, 10, fgMask, 3, 0, 0.04);
+			goodFeaturesToTrack(prvFrGrey, prvPts, 500, 0.01, 10, fgMask, 3, 0, 0.04);
 		}
 		if(prvPts.empty()){
 			// cout<<"Empty prvPts"<<endl;
-			goodFeaturesToTrack(prvFr, prvPts, 500, 0.01, 10, Mat(), 3, 0, 0.04);
+			goodFeaturesToTrack(prvFrGrey, prvPts, 500, 0.01, 10, Mat(), 3, 0, 0.04);
 		}
-		calcOpticalFlowPyrLK(prvFr, nxtFr, prvPts, nxtPts, status, err, winSize, 3, termcrit, 0, 0.001);
+		calcOpticalFlowPyrLK(prvFrGrey, nxtFrGrey, prvPts, nxtPts, status, err, winSize, 3, termcrit, 0, 0.001);
 	#else
 		// Mat flow;
 		double pyr_scale = 0.5;
-		int levels = 3;
-		int winsize = 15;
+		int levels = 1;
+		int winsize = 15; // Larger window size is more robust to noise, too large can give faulty results?
 		int iterations = 3;
 		// int poly_n = 5; double poly_sigma = 1.1;
 		int poly_n = 7; double poly_sigma = 1.5;
 		int flags = 0;
 
-		calcOpticalFlowFarneback(prvFr,nxtFr,flow,pyr_scale,levels,winsize,iterations,poly_n,poly_sigma,flags);
+		calcOpticalFlowFarneback(prvFrGrey,nxtFrGrey,flow,pyr_scale,levels,winsize,iterations,poly_n,poly_sigma,flags);
 
 		prvPts.clear();
 		nxtPts.clear();
@@ -419,7 +428,7 @@ void Fbof::regularizeData(const Mat& marker, const Mat& mask, const Mat& data, M
 	    }
     }
     }
-    // checkRegulData(mask,regulData);
+    checkRegulData(mask,regulData);
 }
 
 void Fbof::applyMotion(const Mat& src, const Mat& regulData, Mat& dst){
@@ -429,8 +438,8 @@ void Fbof::applyMotion(const Mat& src, const Mat& regulData, Mat& dst){
     for(int x=0;x<width;x++){
     for(int y=0;y<height;y++){
     	if((short)(src.at<uchar>(y,x))>0){
-			DataVecType newX = x + regulData.at<DataVec>(y,x)[1];
-			DataVecType newY = y + regulData.at<DataVec>(y,x)[2];
+			DataVecType newX = x - regulData.at<DataVec>(y,x)[1];
+			DataVecType newY = y - regulData.at<DataVec>(y,x)[2];
 			if(newX >= 0 && newY >= 0 && newX < width && newY < height)
 				dst.at<uchar>(newY,newX) = (uchar)(-1);
     	}
@@ -518,38 +527,44 @@ void Fbof::motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motion
 		// opticalFlow(prvFr,nxtFr,status,prvPts,nxtPts,fgMask,flowFarneback); // switch prvFr & nxtFr
 		opticalFlow(nxtFr,prvFr,status,prvPts,nxtPts,fgMask,flowFarneback);
 
-		// Optical flow regularization
-		// optFlowRegularization(prvFr.size(),motCompMask,maskReg,status,prvPts,nxtPts,weights,data,maskRegEntireFrame);
-		optFlowRegularization(prvFr.size(),fgMask,maskReg,status,prvPts,nxtPts,weights,data,maskRegEntireFrame);
+			// Optical flow regularization
+			// optFlowRegularization(prvFr.size(),motCompMask,maskReg,status,prvPts,nxtPts,weights,data,maskRegEntireFrame);
+			optFlowRegularization(prvFr.size(),fgMask,maskReg,status,prvPts,nxtPts,weights,data,maskRegEntireFrame);
 
-		// Foreground reduce
-		maskReg.copyTo(morphRecMarker);
+		if(!hasHighValue(maskReg)){
+			fgMask.copyTo(motionMask);
+			threshold(motionMask,motionMask,250);
+		}else{
+			// Foreground reduce
+			maskReg.copyTo(morphRecMarker);
 
-		// Foreground expand
-		// fgMask.copyTo(morphRecMask);
-		
-		// Still a lot of blocklike artefacts in maskRegEntireFrame
-		bitwise_or(fgMask,maskReg,morphRecMask);
-		/* Disable entire frame optical flow *
-		bitwise_or(fgMask,maskRegEntireFrame,morphRecMask); /**/
-		if(!useRegExpansion){
-		   	// Morphological reconstruction
-		   	morphologicalReconstruction(morphRecMask,morphRecMarker,morphRecResult);
-	   	}else{
-	   		// Morphological reconstruction by region expansion
-		   	expandMarker(data,morphRecMask,morphRecMarker,morphRecResult);
+			// Foreground expand
+			// fgMask.copyTo(morphRecMask);
+			
+			// Still a lot of blocklike artefacts in maskRegEntireFrame
+			bitwise_or(fgMask,maskReg,morphRecMask);
+			/* Disable entire frame optical flow *
+			bitwise_or(fgMask,maskRegEntireFrame,morphRecMask); /**/
+			if(!useRegExpansion){
+			   	// Morphological reconstruction
+			   	morphologicalReconstruction(morphRecMask,morphRecMarker,morphRecResult);
+		   	}else{
+		   		// Morphological reconstruction by region expansion
+			   	expandMarker(data,morphRecMask,morphRecMarker,morphRecResult);
+		   	}
+
+
+		   	/* TR START Checking workflow*
+			Mat motMaskMorph,motMaskExp;
+			morphologicalReconstruction(morphRecMask,morphRecMarker,motMaskMorph);
+			expandMarker(data,morphRecMask,morphRecMarker,motMaskExp);
+			// cout<<"Morph vs Exp"<<endl;
+			// io::printScores(motMaskMorph,motMaskExp);
+		    // io::showMaskOverlap(motMaskMorph,"Morph",motMaskExp,"Exp"); /**/
+
+		   	morphRecResult.copyTo(motionMask);
 	   	}
 
-
-	   	/* TR START Checking workflow*
-		Mat motMaskMorph,motMaskExp;
-		morphologicalReconstruction(morphRecMask,morphRecMarker,motMaskMorph);
-		expandMarker(data,morphRecMask,morphRecMarker,motMaskExp);
-		// cout<<"Morph vs Exp"<<endl;
-		// io::printScores(motMaskMorph,motMaskExp);
-	    // io::showMaskOverlap(motMaskMorph,"Morph",motMaskExp,"Exp"); /**/
-
-	   	morphRecResult.copyTo(motionMask);
 	   	if(usePostProcessing){
 	   		postProcessing(motionMask);
 		}
@@ -557,11 +572,8 @@ void Fbof::motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motion
 		/* TR OFF Motion compensation *
 	   	regularizeData(maskReg,motionMask,data,regulData);
 
-	   	applyMotion(motionMask,regulData,postMotionMask);
-	   	postMotionMask.copyTo(motionMask);
+	   	applyMotion(motionMask,regulData,motCompMask);
 	   	/**/
-	   	
-		// motionCompensation(motionMask,motCompMask,regulData);
 
    		if(showResults){
 			/* Draw optical flow motion vectors */
@@ -620,22 +632,23 @@ void Fbof::motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motion
 			// postfix = useDenoising? " w den" : " wo den";-
 			io::showImage(name+" Source"+postfix,nxtFr,resize,saveResults);
 			// if(useDenoising) io::showImage(name+" Denoised"+postfix,prvFrDenoised,resize,saveResults);
-			io::showImage(name+" Foreground Mask"+postfix,fgMask,resize,saveResults);
-			// io::showImage(name+" Comb Mask",combMask,resize,saveResults);
-			io::showImage(name+" OptFlow1"+postfix,optFlow,resize,saveResults);
-			// io::showImage(name+" OptFlow2"+postfix,optFlow2,resize,saveResults);
+			if(!fgMask.empty()) io::showImage(name+" Foreground Mask"+postfix,fgMask,resize,saveResults);
+			// if(!combMask.empty()) io::showImage(name+" Comb Mask",combMask,resize,saveResults);
+			if(!optFlow.empty()) io::showImage(name+" OptFlow1"+postfix,optFlow,resize,saveResults);
+			// if(!optFlow2.empty()) io::showImage(name+" OptFlow2"+postfix,optFlow2,resize,saveResults);
 			#ifdef FARNEBACK
-			io::showImage(name+" Farneback"+postfix,flowFarneback,resize,saveResults);
+			if(!flowFarneback.empty()) io::showImage(name+" Farneback"+postfix,flowFarneback,resize,saveResults);
 			#endif
-			io::showImage(name+" Weights"+postfix,weights,resize,saveResults);
-			io::showImage(name+" Weights thresholded"+postfix,maskReg,resize,saveResults);
-			// io::showImage(name+" Wei Ent Fr thresholded"+postfix,maskRegEntireFrame,resize,saveResults);
-			io::showImage(name+" MR Marker"+postfix,morphRecMarker,resize,saveResults);
-			io::showImage(name+" MR Mask"+postfix,morphRecMask,resize,saveResults);
-			io::showImage(name+" MR Result"+postfix,morphRecResult,resize,saveResults);
-			// io::showImage(name+" Morph Rec"+postfix,motMaskMorph,resize,saveResults);
-			// io::showImage(name+" Expansion"+postfix,motMaskExp,resize,saveResults);
-			io::showImage(name+" MotionMask"+postfix,motionMask,resize,saveResults);
+			if(!weights.empty()) io::showImage(name+" Weights"+postfix,weights,resize,saveResults);
+			if(!maskReg.empty()) io::showImage(name+" Weights thresholded"+postfix,maskReg,resize,saveResults);
+			// if(!maskRegEntireFrame.empty()) io::showImage(name+" Wei Ent Fr thresholded"+postfix,maskRegEntireFrame,resize,saveResults);
+			if(!morphRecMarker.empty()) io::showImage(name+" MR Marker"+postfix,morphRecMarker,resize,saveResults);
+			if(!morphRecMask.empty()) io::showImage(name+" MR Mask"+postfix,morphRecMask,resize,saveResults);
+			if(!morphRecResult.empty()) io::showImage(name+" MR Result"+postfix,morphRecResult,resize,saveResults);
+			// if(!motMaskMorph.empty()) io::showImage(name+" Morph Rec"+postfix,motMaskMorph,resize,saveResults);
+			// if(!motMaskExp.empty()) io::showImage(name+" Expansion"+postfix,motMaskExp,resize,saveResults);
+			if(!motionMask.empty()) io::showImage(name+" MotionMask"+postfix,motionMask,resize,saveResults);
+			// if(!motCompMask.empty()) io::showImage(name+" MotComp Mask"+postfix,motCompMask,resize,saveResults);
 			
 			// io::showMaskOverlap(fgMask,name+" Foreground Mask",motionMask,name+" MotionMask");
 	    	// io::showMaskOverlap(motionMask,name+" MotionMask",postMotionMask,"PostMotionMask"+postfix);

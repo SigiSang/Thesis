@@ -24,11 +24,10 @@ Datacalculatie:
 	-roc curves maken adhv Recall en FPR (Wikipedia)
 
 Boek:
--algoritme volledig beschrijven
+-algoritme implementatie beschrijven
 	-parameters BgSeg & OptFlo verklaren
 		(onderzoek kort welk effect de parameter heeft en welke waarde best past bij zwart-wit, donkere beelden)
 	-is alles reproduceerbaar?
-	-illustraties toevoegen
 -probleemstelling beter uitwerken zodat probleem reël overkomt
 -problemen met datasets beter uitleggen
 	-weinig ruis, mogelijk verlaagde resolutie (bron van videos?)
@@ -40,6 +39,14 @@ Boek:
 -state of the art bespreken
 -resultaten bespreken
 	-verschillen (beter/slechter) met andere state-of-the-art aantonen en uitleggen
+	-EFIC op kleurwaarden: Ik vermoed dat het resultaat bij omzetting naar grijswaarden iets minder zou zijn,
+		al verwacht ik ook geen significante verschillen omwille van volgende 2 redenen:
+		-Mijn methode combineert een kleurgebaseerd masker met een randgebaseerd masker.
+		De randgebaseerde methode voorziet hierbij intern ook in een omzetting naar grijswaarden.
+		-In het kleurgebaseerd masker zullen de verschillen ook eerder klein zijn, gezien de aard van
+		de video's. Ik vermoed namelijk dat de segmentatie eerder een verschil in intensiteit zal opmerken
+		dan in kleurtint. De achtergrond is vaak een donkere straat of net heldere sneeuw of straatverlichting,
+		en geen groene omgeving bijvoorbeeld.
 -ruis estimatie bespreken?
 -remaining problems & future work:
 	- improvement on morphological reconstruction: using optical flow vectors on entire frame
@@ -59,10 +66,14 @@ Boek:
 
 05/01
 -----
--algoritme uitschrijven
-	-input wordt geconverteerd naar grayscale
-	-similar neighbour weighting : enkel voor pixels in FgMask
-	-refereren naar illustraties in tekst
+==>> Verzenden om te laten nalezen
+-foute noise fixen:
+	-data van 30-60-90 verplaatsen naar 10-20-30
+		-backup maken
+		-30-60-90 ad kant zetten
+		-andere resultaten verwijderen
+		-30-60-90 kopieren naar 10-20-30 folders
+	-tekorten runnen
 -nieuwe run fbof:
 	-wo OFEF & applyMotion, pos pro: large closing
 -problem statement aanpassen
@@ -70,7 +81,6 @@ Boek:
 	-duiden naar goedkope hardware, minder van toepassing op moderne camera's (software correctie)
 		-> data typische hardware verkeerscamera's
 	-...
-==>> Verzenden om te laten nalezen
 -related work
 	-efic
 	-lobster

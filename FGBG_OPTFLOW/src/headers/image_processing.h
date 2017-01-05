@@ -91,7 +91,7 @@ void addNoise(Mat& src, Mat& dst, double stddev=30.0){
 
 	Mat src_16S;
 	src.convertTo(src_16S,typeNoise);
-	addWeighted(src_16S,1.0,noise,0.3,0,src_16S);
+	addWeighted(src_16S,1.0,noise,1.0,0,src_16S);
 
 	src_16S.convertTo(dst,src.type());
 }
@@ -180,6 +180,13 @@ void getCircularStructuringElement(short radius, Mat& struc){
 			}
 		}
 	}
+}
+
+bool hasHighValue(const Mat& bin){
+	for(int i=0;i<bin.total();i++){
+		if(bin.at<uchar>(i) > 0) return true;
+	}
+	return false;
 }
 
 #endif

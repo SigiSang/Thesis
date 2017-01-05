@@ -27,8 +27,8 @@ int main (int argc, char** argv){
 
 	/* Motion detection configuration */
 	ds::Dataset dataset;
-	// const int VID_ID = ds::CD_BRIDGE_ENTRY , skipToFrame = 1000;
-	// const int VID_ID = ds::CD_BUSY_BOULEVARD , skipToFrame = 730;
+	// const int VID_ID = ds::CD_BRIDGE_ENTRY , skipToFrame = 0;
+	// const int VID_ID = ds::CD_BUSY_BOULEVARD , skipToFrame = 745/;
 	// const int VID_ID = ds::CD_STREETCORNER , skipToFrame = 80; // 865;
 	const int VID_ID = ds::CD_TRAMSTATION, skipToFrame = 30;
 	// const int VID_ID = ds::CD_TRAMSTATION, skipToFrame = 590;
