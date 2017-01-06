@@ -22,24 +22,16 @@ queue<int> isAvailable;
 ofstream osLog;
 
 /** Initialise iteration parameters **/
-vector<string> lMd = {
-	FBOF
-	// ,LOBSTER
-	// ,PAWCS
-	// ,SUBSENSE
-	// VIBE
-	// ,EFIC
-};
 vector<int> lDs = { // Dataset IDs
-	//  ds::CD_BRIDGE_ENTRY
+	 ds::CD_BRIDGE_ENTRY
 	// ,ds::CD_BUSY_BOULEVARD
 	// ,ds::CD_FLUID_HIGHWAY
-	ds::CD_STREETCORNER
-	,ds::CD_TRAMSTATION
-	,ds::CD_WINTERSTREET
+	// ,ds::CD_STREETCORNER
+	// ,ds::CD_TRAMSTATION
+	// ,ds::CD_WINTERSTREET
 };
+// vector<bool> lPp = {false,true}; // Post-processing
 vector<bool> lPp = {false,true}; // Post-processing
-// vector<bool> lPp = {true}; // Post-processing
 
 /** Static parameters **/
 bool grayscale = true;
@@ -150,13 +142,9 @@ int main(){
 	for(int i=0;i<MAX_THREADS;i++){
 		isAvailable.push(i);
 	}
-	if(runCalculateScores) io::openLogFile("Calculate_scores", osLog);
 
-	for(int mdIdx=0;mdIdx<lMd.size();mdIdx++){
 	for(int dsIdx=0;dsIdx<lDs.size();dsIdx++){
-	// for(int ns=NOISE_STDDEV_MIN;ns<=NOISE_STDDEV_MIN;ns+=NOISE_STDDEV_INC){
 	for(int ns=NOISE_STDDEV_MIN;ns<=NOISE_STDDEV_MAX;ns+=NOISE_STDDEV_INC){
-	for(int ppIdx=0;ppIdx<lPp.size();ppIdx++){
 
 		while(isAvailable.empty())
 			sleep(1);
@@ -164,12 +152,11 @@ int main(){
 		int idx = isAvailable.front();
 		isAvailable.pop();
 
-		string mdName = lMd[mdIdx];
+		string mdName = FBOF;
 		int DS_ID = lDs[dsIdx];
 		double noiseStddev = ns;
-		bool applyPostProcessing = lPp[ppIdx];
+		bool applyPostProcessing = false;
 
-		td[idx].mdName = mdName;
 		td[idx].DS_ID = DS_ID;
 		td[idx].noiseStddev = noiseStddev;
 		td[idx].applyPostProcessing = applyPostProcessing;
@@ -181,8 +168,6 @@ int main(){
 			run((void*)&td[idx]);
 		#endif
 		
-	}
-	}
 	}
 	}
 

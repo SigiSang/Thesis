@@ -49,7 +49,7 @@ int main(int argc,char **argv){
 			md = new MdFbof(img); nameMd1 = "Improved BgS & OF";
 			// md = new MdLobster(img); nameMd1 = "Lobster";
 			// md = new MdPawcs(img); nameMd2 = "PAWCS";
-			// md2 = new MdSubsense(img); nameMd2 = "SuBSENSE";
+			md2 = new MdSubsense(img); nameMd2 = "SuBSENSE";
 			// md2 = new MdVibe(img); nameMd2 = "ViBe+";
 
 			firstFrame = false;

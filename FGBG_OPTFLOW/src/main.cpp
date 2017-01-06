@@ -49,14 +49,14 @@ int main (int argc, char** argv){
 	bool useRegionExpansion;
 	bool applyPostProcessing = true;
 	bool showResults = true;
-	bool useDenoising = false;
+	bool useDenoising = true;
 	bool useForegroundFeatures = true;
 
 	bool showSrc = true;
-	/**
+	/**/
 	bool withOriginal = false;
 	bool withNoisy = true;
-	/**/
+	/**
 	bool withOriginal = true;
 	bool withNoisy = false;
 	/**

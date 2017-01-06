@@ -14,7 +14,9 @@ using namespace cv;
 class Fbof{
 public:
 	Fbof(){}
-	Fbof(string _name, short _morpRecRadius=2,bool _showResults=false,bool _useDenoising=false,bool _useForegroundFeatures=true):name(_name),morpRecRadius(_morpRecRadius),showResults(_showResults),useDenoising(_useDenoising),useForegroundFeatures(_useForegroundFeatures){ init(); }
+	// use denoising
+	Fbof(string _name, short _morpRecRadius=2,bool _showResults=false,bool _useDenoising=true,bool _useForegroundFeatures=true):name(_name),morpRecRadius(_morpRecRadius),showResults(_showResults),useDenoising(_useDenoising),useForegroundFeatures(_useForegroundFeatures){ init(); }
+	// Fbof(string _name, short _morpRecRadius=2,bool _showResults=false,bool _useDenoising=false,bool _useForegroundFeatures=true):name(_name),morpRecRadius(_morpRecRadius),showResults(_showResults),useDenoising(_useDenoising),useForegroundFeatures(_useForegroundFeatures){ init(); }
 	~Fbof(){}
 
 void motionDetection(Mat& prvFr,Mat& nxtFr,Mat& motCompMask,Mat& motionMask,bool usePostProcessing,bool onlyUpdateBGModel,bool useRegExpansion);
@@ -30,6 +32,18 @@ protected:
 	bool useDenoising;
 	bool useForegroundFeatures;
 	short morpRecRadius; // radius for morphological reconstruction
+
+	/* Algorithm parameters */
+	float minVecLen_axis = 1.0; // Minimum vector size
+	float t_sv = 0.03; // similarity threshold for similar vector estimation: similarity if difference is below threshold
+	short r_sn = 1; // Neighbour radius for similar neighbour weighting
+	float weightThreshold = 0.6; // Converted to t_sn, threshold for similar neighbour weights
+
+	/* Algorithm parameters set in init() */
+	float minVecLenSquared;
+	float t_sv_squared;
+	float maxNeighbours;
+	uchar t_sn; 
 
 	void init();
 	void checkRegulData(const Mat& mask, const Mat& regulData);
@@ -53,6 +67,12 @@ protected:
 };
 
 void Fbof::init(){
+	t_sv_squared = t_sv*t_sv;
+	float windowWidth = 2*r_sn+1;
+	maxNeighbours = windowWidth*windowWidth - 1;
+	t_sn = 255*weightThreshold; //153
+	minVecLenSquared = vectorLengthSquared(minVecLen_axis,minVecLen_axis);
+	/* Background subtraction parameters */
 	int history = 500;
 	double varThreshold = 16;
 	bool detectShadows=true;
@@ -76,8 +96,8 @@ void Fbof::checkRegulData(const Mat& mask, const Mat& regulData){
 }
 
 void Fbof::denoise(const Mat& src, Mat& dst){
-	// dn::denoise(src,dst,dn::DEN_NL_MEANS);
-	dn::denoise(src,dst,dn::DEN_MEDIAN_BLUR);
+	dn::denoise(src,dst,dn::DEN_NL_MEANS);
+	// dn::denoise(src,dst,dn::DEN_MEDIAN_BLUR);
 	// dn::denoise(src,dst,dn::DEN_BILATERAL_FILTER);
 }
 
@@ -168,9 +188,6 @@ void Fbof::opticalFlow(const Mat& prvFr, const Mat& nxtFr, vector<uchar>& status
 }
 
 bool Fbof::similarVectorEstimation(const DataVec& dataVec1, const DataVec& dataVec2){
-	float t = 0.03; // similarity threshold: similarity if difference is below threshold
-	float tSquared = t*t;
-
 	DataVecType deltaX1 = dataVec1[1];
 	DataVecType deltaY1 = dataVec1[2];
 	DataVecType deltaX2 = dataVec2[1];
@@ -182,23 +199,18 @@ bool Fbof::similarVectorEstimation(const DataVec& dataVec1, const DataVec& dataV
 	float dLengthSquared = vectorLengthSquared(deltaXd,deltaYd);
 	float v1LengthSquared = vectorLengthSquared(deltaX1,deltaY1);
 
-	return ( dLengthSquared/v1LengthSquared < tSquared );
+	return ( dLengthSquared/v1LengthSquared < t_sv_squared );
 }
 
 void Fbof::similarNeighbourWeighting(const Mat& data, Mat& weights){
-	short r = 1; //Radius
-	// windowWidth = 2r+1
-	// maxNeighbours = windowWidth²-1 = 4r²+4r = 4r(r+1)
-	// maxWeight = 2^(maxNeighbours) - 1
-	float maxWeight = (1<<(4*r*(r+1)))-1;
 	for(int x=0;x<data.cols;x++){
 	for(int y=0;y<data.rows;y++){
 		short neighbours = 0;
 		DataVec dataVec = data.at<DataVec>(y,x);
 		if(isNonZeroVector(dataVec)){ // Only perform for non-zero vectors
-			for(int i=-1; i<=r; i+=r){
+			for(int i=-1; i<=r_sn; i+=r_sn){
 			if(x+i>0 && x+i < data.cols){
-				for(int j=-1; j<=r; j+=r){
+				for(int j=-1; j<=r_sn; j+=r_sn){
 				if(!(i==0 && j==0) && y+j>0 && y+j < data.rows){
 					DataVec dataVec2 = data.at<DataVec>(y+j,x+i);
 					if(	isNonZeroVector(dataVec2)
@@ -211,8 +223,6 @@ void Fbof::similarNeighbourWeighting(const Mat& data, Mat& weights){
 			}
 			}
 		}
-		// float weight = ((1<<neighbours)-1)/maxWeight;
-		float maxNeighbours = 8;
 		float weight = neighbours/maxNeighbours;
 		weights.at<float>(y,x) = weight;
 	}
@@ -225,9 +235,6 @@ void Fbof::similarNeighbourWeighting(const Mat& data, Mat& weights){
 * TODO add squared vector length to Datavec
 */
 void Fbof::optFlowRegularization(const Size& size, const Mat& fgMask, Mat& dst, vector<uchar>& status, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& weights, Mat& dataEntireFrame, Mat& weightsEntireFrameMask){
-
-	float t = 2.0; // Minimum vector size
-	float tSquared = t*t;
 
 	Mat data;
 	if(std::is_same<DataVecType,short>::value){
@@ -249,7 +256,7 @@ void Fbof::optFlowRegularization(const Size& size, const Mat& fgMask, Mat& dst, 
 			DataVecType deltaX = x2-x1;
 			DataVecType deltaY = y2-y1;
 	// 		cout<<deltaX<<" "<<deltaY<<endl;
-			if(vectorLengthSquared(deltaX,deltaY) < tSquared){
+			if(vectorLengthSquared(deltaX,deltaY) < minVecLenSquared){
 				deltaX = 0;
 				deltaY = 0;
 			}
@@ -267,21 +274,18 @@ void Fbof::optFlowRegularization(const Size& size, const Mat& fgMask, Mat& dst, 
     	#endif
     }
 
-	float weightThreshold = 0.6;
-	uchar convertedThreshold = 255*weightThreshold;
-
     // Weighting for regularization
 	similarNeighbourWeighting(data,weights);
     dst = Mat::ones(size,CV_8UC1);
     weights.convertTo(dst,CV_8UC1,255);
-   	threshold(dst,dst,convertedThreshold);
+   	threshold(dst,dst,t_sn);
 
    	/* Disable entire frame optical flow *
 	similarNeighbourWeighting(dataEntireFrame,weightsEntireFrame);
     weightsEntireFrameMask = Mat::ones(size,CV_8UC1);
     weightsEntireFrame.convertTo(weightsEntireFrameMask,CV_8UC1,255);
    	// threshold(weightsEntireFrameMask,weightsEntireFrameMask,255*0.8);
-   	threshold(weightsEntireFrameMask,weightsEntireFrameMask,convertedThreshold);
+   	threshold(weightsEntireFrameMask,weightsEntireFrameMask,t_sn);
    	/**/
 }
 
@@ -297,8 +301,8 @@ void Fbof::expandByList(const Mat& data, const Mat& mask, Mat& marker, vector<bo
     Mat struc;
     struc = getStructuringElement(MORPH_ELLIPSE,Size(strucSize,strucSize));
     // getCircularStructuringElement(r,struc);
-	for(int i=0; i<toExpand.size();i++){
-    	int idx = toExpand[i];
+	for(int k=0; k<toExpand.size();k++){
+    	int idx = toExpand[k];
     	if(!expanded[idx]){
     		expanded[idx] = true;
     		marker.at<uchar>(idx)=(uchar)(-1); // Max value
@@ -492,7 +496,7 @@ void Fbof::motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motion
 	vector<uchar> status;
 	vector<Point2f> prvPts,nxtPts;
 	Mat data, regulData;
-	Mat prvFrDenoised,fgMask,combMask,optFlow,weights,maskReg,morphRecMask,morphRecMarker,morphRecResult,postMotionMask;
+	Mat nxtFrDenoised,fgMask,combMask,optFlow,weights,maskReg,morphRecMask,morphRecMarker,morphRecResult,postMotionMask;
 	Mat flowFarneback = Mat::zeros(prvFr.size(),CV_32FC2);
 
 	/* TMP for checking workflow *
@@ -502,18 +506,12 @@ void Fbof::motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motion
 	/* TMP END */
 
 	if(useDenoising)
-		denoise(prvFr,prvFrDenoised);
+		denoise(nxtFr,nxtFrDenoised);
 	else
-		prvFr.copyTo(prvFrDenoised);
+		nxtFr.copyTo(nxtFrDenoised);
 
 	// Background subtraction
-	// backgroundSubtraction(prvFrDenoised,fgMask,pMOG2); // switch prvFr & nxtFr
-	backgroundSubtraction(nxtFr,fgMask,pMOG2);
-	/* TR Test simple denoise + MOG *
-	Mat nxtFrDenoised;
-	denoise(nxtFr,nxtFrDenoised);
 	backgroundSubtraction(nxtFrDenoised,fgMask,pMOG2);
-	/**/
 
 	if(!onlyUpdateBGModel){
 
@@ -631,13 +629,14 @@ void Fbof::motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motion
 			string postfix = "";
 			// postfix = useDenoising? " w den" : " wo den";-
 			io::showImage(name+" Source"+postfix,nxtFr,resize,saveResults);
-			// if(useDenoising) io::showImage(name+" Denoised"+postfix,prvFrDenoised,resize,saveResults);
+			if(useDenoising) io::showImage(name+" Denoised"+postfix,nxtFrDenoised,resize,saveResults);
 			if(!fgMask.empty()) io::showImage(name+" Foreground Mask"+postfix,fgMask,resize,saveResults);
 			// if(!combMask.empty()) io::showImage(name+" Comb Mask",combMask,resize,saveResults);
-			if(!optFlow.empty()) io::showImage(name+" OptFlow1"+postfix,optFlow,resize,saveResults);
-			// if(!optFlow2.empty()) io::showImage(name+" OptFlow2"+postfix,optFlow2,resize,saveResults);
 			#ifdef FARNEBACK
 			if(!flowFarneback.empty()) io::showImage(name+" Farneback"+postfix,flowFarneback,resize,saveResults);
+			#else
+			if(!optFlow.empty()) io::showImage(name+" OptFlow1"+postfix,optFlow,resize,saveResults);
+			// if(!optFlow2.empty()) io::showImage(name+" OptFlow2"+postfix,optFlow2,resize,saveResults);
 			#endif
 			if(!weights.empty()) io::showImage(name+" Weights"+postfix,weights,resize,saveResults);
 			if(!maskReg.empty()) io::showImage(name+" Weights thresholded"+postfix,maskReg,resize,saveResults);
