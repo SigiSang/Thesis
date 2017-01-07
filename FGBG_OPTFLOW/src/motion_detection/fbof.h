@@ -14,9 +14,9 @@ using namespace cv;
 class Fbof{
 public:
 	Fbof(){}
-	// use denoising
-	Fbof(string _name, short _morpRecRadius=2,bool _showResults=false,bool _useDenoising=true,bool _useForegroundFeatures=true):name(_name),morpRecRadius(_morpRecRadius),showResults(_showResults),useDenoising(_useDenoising),useForegroundFeatures(_useForegroundFeatures){ init(); }
-	// Fbof(string _name, short _morpRecRadius=2,bool _showResults=false,bool _useDenoising=false,bool _useForegroundFeatures=true):name(_name),morpRecRadius(_morpRecRadius),showResults(_showResults),useDenoising(_useDenoising),useForegroundFeatures(_useForegroundFeatures){ init(); }
+	Fbof(string _name, float _minVecLen_axis=1.0, float _t_sv=0.03, short _r_sn=1, float _t_sn=0.6, short _r_mr=2,bool _showResults=false,bool _useDenoising=false):
+		name(_name),minVecLen_axis(_minVecLen_axis),t_sv(_t_sv),r_sn(_r_sn),t_sn(_t_sn),r_mr(_r_mr),showResults(_showResults),useDenoising(_useDenoising)
+		{ init(); }
 	~Fbof(){}
 
 void motionDetection(Mat& prvFr,Mat& nxtFr,Mat& motCompMask,Mat& motionMask,bool usePostProcessing,bool onlyUpdateBGModel,bool useRegExpansion);
@@ -30,20 +30,19 @@ protected:
 	Ptr<BackgroundSubtractor> pMOG2;
 	bool showResults;
 	bool useDenoising;
-	bool useForegroundFeatures;
-	short morpRecRadius; // radius for morphological reconstruction
 
 	/* Algorithm parameters */
-	float minVecLen_axis = 1.0; // Minimum vector size
-	float t_sv = 0.03; // similarity threshold for similar vector estimation: similarity if difference is below threshold
-	short r_sn = 1; // Neighbour radius for similar neighbour weighting
-	float weightThreshold = 0.6; // Converted to t_sn, threshold for similar neighbour weights
+	float minVecLen_axis; // Minimum vector size along an axis, e.g. 1 will set threshold at length of vector (1,1)
+	float t_sv; // similarity threshold for similar vector estimation: similarity if difference is below threshold
+	short r_sn; // Neighbour radius for similar neighbour weighting
+	float t_sn; // percentage threshold for similar neighbour weights
+	short r_mr; // radius of structuring element for dilation during morphological reconstruction
 
 	/* Algorithm parameters set in init() */
 	float minVecLenSquared;
 	float t_sv_squared;
 	float maxNeighbours;
-	uchar t_sn; 
+	uchar t_sn_converted; 
 
 	void init();
 	void checkRegulData(const Mat& mask, const Mat& regulData);
@@ -70,12 +69,12 @@ void Fbof::init(){
 	t_sv_squared = t_sv*t_sv;
 	float windowWidth = 2*r_sn+1;
 	maxNeighbours = windowWidth*windowWidth - 1;
-	t_sn = 255*weightThreshold; //153
+	t_sn_converted = 255*t_sn; //153
 	minVecLenSquared = vectorLengthSquared(minVecLen_axis,minVecLen_axis);
 	/* Background subtraction parameters */
 	int history = 500;
 	double varThreshold = 16;
-	bool detectShadows=true;
+	bool detectShadows=false;
 	pMOG2 = createBackgroundSubtractorMOG2(history,varThreshold,detectShadows);
 }
 
@@ -106,6 +105,7 @@ void Fbof::backgroundSubtraction(const Mat& frame, Mat& fgMask, Ptr<BackgroundSu
     pMOG2->apply(frame, fgMask,learningRate);
 }
 
+/* Unused */
 // TODO remove combinedMask as parameter, not needed as output parameter. Placeholder for data, transferred to goodFeaturesToTrack
 void Fbof::getOptFlowFeatures(const Mat& motCompMask, const Mat& fgMask, Mat& combinedMask, vector<Point2f>& goodFeaturesToTrack, bool useForegroundFeatures=true){
 	const int width = motCompMask.cols, height = motCompMask.rows;
@@ -278,14 +278,14 @@ void Fbof::optFlowRegularization(const Size& size, const Mat& fgMask, Mat& dst, 
 	similarNeighbourWeighting(data,weights);
     dst = Mat::ones(size,CV_8UC1);
     weights.convertTo(dst,CV_8UC1,255);
-   	threshold(dst,dst,t_sn);
+   	threshold(dst,dst,t_sn_converted);
 
    	/* Disable entire frame optical flow *
 	similarNeighbourWeighting(dataEntireFrame,weightsEntireFrame);
     weightsEntireFrameMask = Mat::ones(size,CV_8UC1);
     weightsEntireFrame.convertTo(weightsEntireFrameMask,CV_8UC1,255);
    	// threshold(weightsEntireFrameMask,weightsEntireFrameMask,255*0.8);
-   	threshold(weightsEntireFrameMask,weightsEntireFrameMask,t_sn);
+   	threshold(weightsEntireFrameMask,weightsEntireFrameMask,t_sn_converted);
    	/**/
 }
 
@@ -295,7 +295,7 @@ void Fbof::optFlowRegularization(const Size& size, const Mat& fgMask, Mat& dst, 
 * (pixel at the center, window is square with edge size = 2r+1 for a set radius r)
 */
 void Fbof::expandByList(const Mat& data, const Mat& mask, Mat& marker, vector<bool>& expanded, vector<int> toExpand){
-    const int width=mask.cols, height=mask.rows, r=morpRecRadius;
+    const int width=mask.cols, height=mask.rows, r=r_mr;
    	int strucSize = 2*r+1;
    	int c=r; // centre of struc
     Mat struc;
@@ -365,7 +365,7 @@ void Fbof::expandMarker(const Mat& data, const Mat& mask, const Mat& marker, Mat
 void Fbof::morphologicalReconstruction(const Mat& mask, const Mat& marker, Mat& dst){
    	Mat dilation,maskedDilation,prevMaskedDilation;
    	bool hasChanged;
-   	int r=morpRecRadius;
+   	int r=r_mr;
    	int strucSize = 2*r+1;
     Mat struc;
     struc = getStructuringElement(MORPH_ELLIPSE,Size(strucSize,strucSize));
@@ -479,7 +479,7 @@ void Fbof::postProcessing(Mat& img){
    	int sizeMedBlur = 7;
    	int sizeMorph = 9;
    	/* Large closing */
-   	int sizeMedBlur = 7;
+   	int sizeMedBlur = 3;
    	int sizeMorph = 21;
    	/**/
 	Mat struc = getStructuringElement(MORPH_ELLIPSE,Size(sizeMorph,sizeMorph));

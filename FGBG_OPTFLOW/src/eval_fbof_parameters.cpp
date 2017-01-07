@@ -39,7 +39,6 @@ bool runMotionDetection = true;
 bool runCalculateScores = true;
 
 struct thread_data{
-	string mdName;
 	int DS_ID;
 	double noiseStddev;
 	bool applyPostProcessing;
@@ -51,10 +50,9 @@ void waitRandom(){
     usleep(sleepTime);
 }
 
-void buildPathsOutput(string& pathImgs, string& pathScores, string mdName, string dsName, int noiseStddev, bool applyPostProcessing){
+void buildPathsOutput(string& pathImgs, string& pathScores, string dsName, int noiseStddev, bool applyPostProcessing){
 	stringstream ss;
-	ss << ds::DIR_DS;
-	ss << mdName<<"/";
+	ss << io::DIR_EVAL_FBOF_PARAMS;
 	ss << (applyPostProcessing?"w-":"wo-")<<"pospro";
 	ss << "_";
 	ss << "noise-"<<std::setfill('0')<<std::setw(3)<<noiseStddev;
@@ -80,7 +78,6 @@ void endThread(int idx, MotionDetection* m){
 void *run (void* arg){
 	struct thread_data* td = (struct thread_data*) arg;
 
-	string mdName = td->mdName;
 	int DS_ID = td->DS_ID;
 	double noiseStddev = td->noiseStddev;
 	bool applyPostProcessing = td->applyPostProcessing;
@@ -88,7 +85,7 @@ void *run (void* arg){
 	cout<<"Go for "<<threadIdx<<endl;
 
 	MotionDetection* m;
-	loadMotionDetection(m,mdName);
+	loadMotionDetection(m,FBOF);
 	ds::Dataset d;
 	ds::loadDataset(d,DS_ID,grayscale,noiseStddev);
 
@@ -102,12 +99,11 @@ void *run (void* arg){
 	int idx = io::IDX_OUTPUT_START;
 
 	d.next(frame);
-	if(mdName!=EFIC) m->init(frame);
 
 	string pathImgs, pathScores;
-	buildPathsOutput(pathImgs,pathScores,mdName,d.getName(),noiseStddev,applyPostProcessing);
+	buildPathsOutput(pathImgs,pathScores,d.getName(),noiseStddev,applyPostProcessing);
 
-	if( runMotionDetection && (mdName==FBOF || !io::isDirExist(io::DIR_OUTPUT+pathImgs)) ){
+	if(runMotionDetection){
 		cout<<"Running motion detection for: "<<pathImgs<<endl;
 		// io::clearOutput(pathImgs);
 		for(; d.hasNext(); idx++){
@@ -152,7 +148,6 @@ int main(){
 		int idx = isAvailable.front();
 		isAvailable.pop();
 
-		string mdName = FBOF;
 		int DS_ID = lDs[dsIdx];
 		double noiseStddev = ns;
 		bool applyPostProcessing = false;

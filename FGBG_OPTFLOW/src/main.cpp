@@ -45,12 +45,18 @@ int main (int argc, char** argv){
 
 	string name="Original",nameNoisy="Noisy";
 
-	short morpRecRadius = 2; // radius for morphological reconstruction
+	/* Algorithm parameters */
+	/* Algorithm parameters */
+	float minVecLen_axis = 1.0; // Minimum vector size along an axis, e.g. 1 will set threshold at length of vector (1,1)
+	float t_sv = 0.03; // similarity threshold for similar vector estimation: similarity if difference is below threshold
+	short r_sn = 1; // Neighbour radius for similar neighbour weighting
+	float t_sn = 0.6; // percentage threshold for similar neighbour weights
+	short r_mr = 2; // radius of structuring element for dilation during morphological reconstruction
+
 	bool useRegionExpansion;
 	bool applyPostProcessing = true;
 	bool showResults = true;
-	bool useDenoising = true;
-	bool useForegroundFeatures = true;
+	bool useDenoising = false;
 
 	bool showSrc = true;
 	/**/
@@ -70,10 +76,10 @@ int main (int argc, char** argv){
 	io::readInputImage(dirInput,fnRoi,true,ROI);
 
 	dataset.next(prvFr);
-	Fbof fbof(name,morpRecRadius,showResults,useDenoising,useForegroundFeatures);
-	Fbof fbofNoisy(nameNoisy,morpRecRadius,showResults,useDenoising,useForegroundFeatures);
-	// Fbof fbofExp(name+" Exp",morpRecRadius,showResults,useDenoising,useForegroundFeatures);
-	// Fbof fbofExpNoisy(nameNoisy+" Exp",morpRecRadius,showResults,useDenoising,useForegroundFeatures);
+	Fbof fbof(name,minVecLen_axis,t_sv,r_sn,t_sn,r_mr,showResults,useDenoising);
+	Fbof fbofNoisy(nameNoisy,minVecLen_axis,t_sv,r_sn,t_sn,r_mr,showResults,useDenoising);
+	// Fbof fbofExp(name+" Exp",minVecLen_axis,t_sv,r_sn,t_sn,r_mr,showResults,useDenoising);
+	// Fbof fbofExpNoisy(nameNoisy+" Exp",minVecLen_axis,t_sv,r_sn,t_sn,r_mr,showResults,useDenoising);
 
 	motCompMask = Mat::zeros(prvFr.size(),CV_8UC1);
 	motCompMask.copyTo(motCompMaskNoisy);

@@ -27,14 +27,14 @@ vector<string> lMd = {
 	// ,LOBSTER
 	// ,PAWCS
 	// ,SUBSENSE
-	// VIBE
+	// ,VIBE
 	// ,EFIC
 };
 vector<int> lDs = { // Dataset IDs
-	//  ds::CD_BRIDGE_ENTRY
-	// ,ds::CD_BUSY_BOULEVARD
-	// ,ds::CD_FLUID_HIGHWAY
-	ds::CD_STREETCORNER
+	 ds::CD_BRIDGE_ENTRY
+	,ds::CD_BUSY_BOULEVARD
+	,ds::CD_FLUID_HIGHWAY
+	,ds::CD_STREETCORNER
 	,ds::CD_TRAMSTATION
 	,ds::CD_WINTERSTREET
 };

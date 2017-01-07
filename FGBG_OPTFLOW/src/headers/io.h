@@ -26,6 +26,7 @@ namespace io {
 	/** Directories **/
 	const string DIR_INPUT = "/media/tim/Game drive/Data_thesis/input/";
 	const string DIR_OUTPUT = "/media/tim/Game drive/Data_thesis/output/";
+	const string DIR_EVAL_FBOF_PARAMS = "eval_fbof_params/";
 
 	/** Constants for Scores IO **/
 	const char SC_DELIM = ',';
