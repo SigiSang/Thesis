@@ -6,6 +6,7 @@
 
 namespace scores{
 
+	/* Data array indexes */
 	static const short TP 	= 0;
 	static const short TN 	= 1;
 	static const short FP	= 2;
@@ -17,9 +18,10 @@ namespace scores{
 	static const short PWC	= 8;
 	static const short PR	= 9;
 	static const short FS	= 10;
-	static const short TOTAL_SAMPLES = 11;
+	static const short TOTAL_SAMPLES = 11; // total number of samples in the data array
+	/*  */
 
-	static const short DATA_SIZE = 12;
+	static const short DATA_SIZE = 12; // size of a data array
 
 	// Average ranking accross categories : (sum of ranks for all categories) / (number of categories)
 	double getAverageRankingCatergories(){
@@ -84,6 +86,19 @@ namespace scores{
 		return 0;
 	}
 
+	void calculateMetrics(vector<double>& data){
+		data[RE] = getRecall(data);
+		data[SP] = getSpecificity(data);
+		data[FPR] = getFalsePositiveRate(data);
+		data[FNR] = getFalseNegativeRate(data);
+		data[PWC] = getPercentageOfWrongClassifications(data);
+		data[PR] = getPrecision(data);
+		data[FS] = getFScore(data);
+		for(int i=0;i<data.size();i++){
+			if(isnan(data[i])) data[i] = 0;
+		}
+	}
+
 	void calculateConfusionMatrix(const Mat& gt, const Mat& bin, vector<double>& data) {
 		const uchar STATIC = 0;
 		const uchar HARD_SHADOW = 50;
@@ -118,17 +133,8 @@ namespace scores{
 		    }
 		}
 		}
-		data[RE] = getRecall(data);
-		data[SP] = getSpecificity(data);
-		data[FPR] = getFalsePositiveRate(data);
-		data[FNR] = getFalseNegativeRate(data);
-		data[PWC] = getPercentageOfWrongClassifications(data);
-		data[PR] = getPrecision(data);
-		data[FS] = getFScore(data);
 		data[TOTAL_SAMPLES] = 1;
-		for(int i=0;i<data.size();i++){
-			if(isnan(data[i])) data[i] = 0;
-		}
+		calculateMetrics(data);
 	}
 
 	bool isZeroData(const vector<double>& data){

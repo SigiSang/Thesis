@@ -10,7 +10,7 @@ for d in {bridgeEntry,busyBoulvard,fluidHighway,streetCornerAtNight,tramStation,
 	dir="$dir_sets/$m/$p-pospro_noise-$n";
 	fn=$(ls $dir/$d*.csv 2>/dev/null | sort -r | head -1)
 	if [ $fn ]; then
-		mv -f $fn $dir_sheets/${m}_$p-pospro_noise-${n}_$d.csv;
+		cp -f $fn $dir_sheets/${m}_$p-pospro_noise-${n}_$d.csv;
 	fi;
 done;
 done;

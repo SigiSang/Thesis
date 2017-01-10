@@ -9,9 +9,6 @@ Hoofdopmerkingen presentatie 20-12-2016:
 TODO
 ----
 Datacalculatie:
-+uitvoer eigen algoritme maken
-+datacalculatie voor resterende algoritmen maken
-+macro voor importeren csv's maken
 -data verwerken in grafieken
 	-wat hoe tonen?
 		-ranking (bars) per methode
@@ -48,6 +45,8 @@ Boek:
 		dan in kleurtint. De achtergrond is vaak een donkere straat of net heldere sneeuw of straatverlichting,
 		en geen groene omgeving bijvoorbeeld.
 -ruis estimatie bespreken?
+	-> toepassen op zelf gemaakte video en zo duiden welke niveau en type ruis aangepakt moet worden
+	-> video grondig ontruizen, waarna ruis=orig-ontruisd en ruis invoegen aan geannoteerde dataset
 -remaining problems & future work:
 	- improvement on morphological reconstruction: using optical flow vectors on entire frame
 		>> expand on pixel having a motion vector similar to the REGULARISED vector
@@ -64,23 +63,30 @@ Boek:
 -dankwoord
 -...
 
-05/01
+09/01
 -----
-==>> Verzenden om te laten nalezen
--foute noise fixen:
-	-data van 30-60-90 verplaatsen naar 10-20-30
-		-backup maken
-		-30-60-90 ad kant zetten
-		-andere resultaten verwijderen
-		-30-60-90 kopieren naar 10-20-30 folders
-	-tekorten runnen
--nieuwe run fbof:
-	-wo OFEF & applyMotion, pos pro: large closing
--problem statement aanpassen
-	-noise beter uitschrijven
+-HDD intensieve taken:
+	-backup output noisy (bezig)
+	-efic output reorganiseren
+	-verwijderen output noisy
+	-verwijderen input noisy
+	-genereren nieuwe input noisy
+	-lobster,subsense en vibe eval(mot+calc) runnen
+	-efic eval(calc) runnen
+
+-app schrijven die poisson noise toevoegt >> Matlab (Windows installatie of Athena) >> J = imnoise(I,'poisson')
+-fout noise fixen (HDD intensief)
+-roc curves fbof parameters
+	-reorg data
+	-grafieken maken
+-noise en probleem duiding in background
+	-noise beter uitschrijven (read & shot noise)
+		->Poisson + Gaussiaanse verdeling
 	-duiden naar goedkope hardware, minder van toepassing op moderne camera's (software correctie)
-		-> data typische hardware verkeerscamera's
+		-> CMOS : goedkoopste, maar lagere kwaliteit en gevoeliger voor ruis
+		-> verkeerscamera's, voorbeeld trafficland.com
 	-...
+-problem statement aanpassen
 -related work
 	-efic
 	-lobster

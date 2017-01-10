@@ -14,8 +14,8 @@ using namespace cv;
 class Fbof{
 public:
 	Fbof(){}
-	Fbof(string _name, float _minVecLen_axis=1.0, float _t_sv=0.03, short _r_sn=1, float _t_sn=0.6, short _r_mr=2,bool _showResults=false,bool _useDenoising=false):
-		name(_name),minVecLen_axis(_minVecLen_axis),t_sv(_t_sv),r_sn(_r_sn),t_sn(_t_sn),r_mr(_r_mr),showResults(_showResults),useDenoising(_useDenoising)
+	Fbof(string _name, float _minVecLen_axis=1.0, short _r_sn=1, float _t_sv=0.03, float _t_sn=0.6, short _r_mr=2,bool _showResults=false,bool _useDenoising=false):
+		name(_name),minVecLen_axis(_minVecLen_axis),r_sn(_r_sn),t_sv(_t_sv),t_sn(_t_sn),r_mr(_r_mr),showResults(_showResults),useDenoising(_useDenoising)
 		{ init(); }
 	~Fbof(){}
 

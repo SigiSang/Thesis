@@ -1,0 +1,23 @@
+#!/bin/bash
+cd "/media/tim/Game drive/Data_thesis/output/datasets"
+
+datasets=(bridgeEntry busyBoulvard fluidHighway streetCornerAtNight tramStation winterStreet);
+no_frames=(2499 2759 1363 5199 2999 1784);
+
+for m in {efic,fbof,lobster,subsense,vibe}; do
+for p in {wo,w}; do
+for n in {000..030..10}; do
+for ((d_i=0; d_i<${#datasets[@]}; d_i++)); do
+	
+	dir="$m/$p-pospro_noise-$n/${datasets[$d_i]}";
+	fn=$(ls $dir/*.png 2>/dev/null | sort -r | head -1)
+	if [ $fn ]; then
+		if [ $fn \< "$dir/00${no_frames[$d_i]}.png" ]; then
+			echo -e ">>> $dir is short: \n\t fn: $fn\n\t expected: 00${no_frames[$d_i]}"
+		fi;
+	fi;
+
+done;
+done;
+done;
+done;

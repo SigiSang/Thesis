@@ -23,11 +23,11 @@ ofstream osLog;
 
 /** Initialise iteration parameters **/
 vector<string> lMd = {
-	FBOF
-	// ,LOBSTER
+	// FBOF
+	LOBSTER // done
 	// ,PAWCS
-	// ,SUBSENSE
-	// ,VIBE
+	,SUBSENSE // done
+	,VIBE // done
 	// ,EFIC
 };
 vector<int> lDs = { // Dataset IDs
@@ -43,7 +43,7 @@ vector<bool> lPp = {false,true}; // Post-processing
 
 /** Static parameters **/
 bool grayscale = true;
-bool runMotionDetection = true;
+bool runMotionDetection = false;
 bool runCalculateScores = true;
 
 struct thread_data{
@@ -53,6 +53,21 @@ struct thread_data{
 	bool applyPostProcessing;
 	int idx;
 };
+
+/* Printing and logging */
+void println(ostream& os, const char *line){
+	os<<line<<endl;
+}
+
+void printAndLogln(const char *line){
+	println(cout,line);
+	println(osLog,line);
+}
+
+void printAndLogln(string line){
+	printAndLogln(line.c_str());
+}
+/*  */
 
 void waitRandom(){
 	float sleepTime = 10*rand()/RAND_MAX;        
@@ -86,6 +101,8 @@ void endThread(int idx, MotionDetection* m){
 }
 
 void *run (void* arg){
+	stringstream ss;
+
 	struct thread_data* td = (struct thread_data*) arg;
 
 	string mdName = td->mdName;
@@ -93,7 +110,7 @@ void *run (void* arg){
 	double noiseStddev = td->noiseStddev;
 	bool applyPostProcessing = td->applyPostProcessing;
 	int threadIdx = td->idx;
-	cout<<"Go for "<<threadIdx<<endl;
+	ss.str("");	ss<<"Go for "<<threadIdx;	printAndLogln(ss.str());
 
 	MotionDetection* m;
 	loadMotionDetection(m,mdName);
@@ -116,7 +133,7 @@ void *run (void* arg){
 	buildPathsOutput(pathImgs,pathScores,mdName,d.getName(),noiseStddev,applyPostProcessing);
 
 	if( runMotionDetection && (mdName==FBOF || !io::isDirExist(io::DIR_OUTPUT+pathImgs)) ){
-		cout<<"Running motion detection for: "<<pathImgs<<endl;
+		printAndLogln("Running motion detection for: "+pathImgs);
 		// io::clearOutput(pathImgs);
 		for(; d.hasNext(); idx++){
 			d.next(frame,gt);
@@ -127,17 +144,16 @@ void *run (void* arg){
 			sprintf(bufferImgName,io::REGEX_IMG_OUTPUT.c_str(),idx);
 			io::saveImage(pathImgs,string(bufferImgName),motionMask);
 		}
-		cout<<"Finished motion detection for: "<<pathImgs<<endl;
+		printAndLogln("Finished motion detection for: "+pathImgs);
 	}
 
 	if(runCalculateScores){
 		if(!io::isDirExist(io::DIR_OUTPUT+pathImgs)){
-			osLog<<"No output for "<<pathImgs<<endl;
-			cout<<"No output for "<<pathImgs<<endl;
+			printAndLogln("WARNING: No output for "+pathImgs);
 		}else{
-			cout<<"Running score calculation for: "<<pathImgs<<endl;
+			printAndLogln("Running score calculation for: "+pathImgs);
 			d.calculateScores(pathImgs,pathScores);
-			cout<<"Finished score calculation for: "<<pathImgs<<endl;
+			printAndLogln("Finished score calculation for: "+pathImgs);
 		}
 	}
 

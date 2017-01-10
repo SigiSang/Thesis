@@ -1,0 +1,10 @@
+#!/bin/bash
+main="/media/tim/Game drive/Data_thesis/output/datasheets"
+src="$main/eval_fbof_parameters"
+
+for p in {minVec,r_sn,t_sv,t_sn,r_mr}; do
+	fn=$(ls "$src/$p"*.csv 2>/dev/null | sort -r | head -1)
+	if [ "$fn" ]; then
+		cp -f "$fn" "$main/$p.csv";
+	fi;
+done

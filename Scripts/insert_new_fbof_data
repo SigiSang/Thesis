@@ -1,5 +1,5 @@
 #!/bin/bash
 cd "$(dirname "$0")"
-./move_datasheets
+./cp_latest_datasheets
 ./backup_fbof_data
 ./reformat_data

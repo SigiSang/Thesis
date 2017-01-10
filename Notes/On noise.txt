@@ -3,18 +3,70 @@ low-light noise == shot noise && read noise
 Wikipedia:
 ----------
 In low light, correct exposure requires the use of slow shutter speed (i.e. long exposure time), higher gain (ISO sensitivity), or both. On most cameras, slower shutter speeds lead to increased salt-and-pepper noise due to photodiode leakage currents. At the cost of a doubling of read noise variance (41% increase in read noise standard deviation), this salt-and-pepper noise can be mostly eliminated by dark frame subtraction. Banding noise, similar to shadow noise, can be introduced through brightening shadows or through color-balance processing.
-The relative effect of both read noise and shot noise increase as the exposure is reduced, corresponding to increased ISO sensitivity, since fewer photons are counted (shot noise) and since more amplification of the signal is necessary.
+The relative effect of both read noise and shot noise increases as the exposure is reduced, corresponding to increased ISO sensitivity, since fewer photons are counted (shot noise) and since more amplification of the signal is necessary.
 
 Most algorithms for converting image sensor data to an image, whether in-camera or on a computer, involve some form of noise reduction. There are many procedures for this, but all attempt to determine whether the actual differences in pixel values constitute noise or real photographic detail, and average out the former while attempting to preserve the latter. However, no algorithm can make this judgment perfectly, so there is often a tradeoff made between noise removal and preservation of fine, low-contrast detail that may have characteristics similar to noise. Many cameras have settings to control the aggressiveness of the in-camera noise reduction. (K J Sreeja & Prudhvi Raj Budumuru (2003) http://www.ijera.com/papers/Vol3_issue6/CG36496501.pdf)
+
+
 
 Read noise:
 -----------
 http://www.andor.com/learning-academy/read-noise-understanding-scmos-read-noise
+-
+Read Noise
+CCD architecture is such that the charge from each pixel is transferred through a common readout structure, at least in single output port CCDs, where charge is converted to voltage and amplified prior to digitization in the Analogue to Digital Converter (ADC) of the camera. This results in each pixel being subject to the same readout noise. However, CMOS technology differs in that each individual pixel possesses its own readout structure for converting charge to voltage. In the CIS 2051 sCMOS sensor, each column possesses dual amplifiers and ADCs at both top and bottom (facilitating the split sensor readout). During readout, voltage information from each pixel is directly communicated to the appropriate amplifier/ADC, a row of pixels at a time
+
+2010 Image de-noising by various filters for different noise.pdf
+-
+6.1 Amplifier noise (Gaussian noise)
+The standard model of amplifier noise is additive, Gaussian,
+independent at each pixel and independent of the signal
+intensity.In color cameras where more amplification is used in
+the blue color channel than in the green or red channel, there can
+be more noise in the blue channel. Amplifier noise is a major
+part of the "read noise" of an image sensor, that is, of the
+constant noise level in dark areas of the image [4].
+
 
 Shot noise:
 -----------
 http://optical-technologies.info/shot-noise/
+-
+Fundamental physics tells us the light is made of particles (photons), which are emitted by the source at random. For that reason, the amount of photons emitted by the source (sun, bulb, laser, etc.) is not constant, but exhibits detectable statistical fluctuations. And this is in a nutshell what shot noise is. Because of its nature, it does not depends on the quality of the detector and is unavoidable. However the shot noise becomes a real issue only when the optical intensity is fairly low: in this case quantum fluctuations become much more noticeable.
+-
+The random process of light emission can generally be modelled using a Poisson distribution, the properties of which are very well known. If we note p(n) the probability that n photons arrive on the detector:
+p(n)=n¯nexp(−n¯)n!
+n¯=∑0+∞np(n)
+σ2n=∑0+∞(n−n¯)2p(n)=n2¯¯¯¯−n¯2=n¯
+
+where σn is the standard deviation. What this means is that for 100 photons arriving on the detector, the uncertainty about the number of photon is of ±10 (±10%). If the number of photon is somewhat closer to common levels, e.g. 1010, the uncertainty becomes ±105, which is ±0.000,01%. It then becomes obvious that the shot noise is an issue only at low light level.
+
+2010 Image de-noising by various filters for different noise.pdf
+-
+6.3 Poisson noise
+Poisson noise or shot noise is a type of electronic noise that
+occurs when the finite number of particles that carry energy,
+such as electrons in an electronic circuit or photons in an optical
+device, is small enough to give rise to detectable statistical
+fluctuations in a measurement [4].
+
 
 Image sensors, CCD vs CMOS
 --------------------------
 http://electronics.howstuffworks.com/cameras-photography/digital/question362.htm
+-
+Digital cameras have become extremely common as the prices have come down. One of the drivers behind the falling prices has been the introduction of CMOS image sensors. CMOS sensors are much less expensive to manufacture than CCD sensors.
+-
+Both CCD (charge-coupled device) and CMOS (complementary metal-oxide semiconductor) image sensors start at the same point -- they have to convert light into electrons. If you have read the article How Solar Cells Work, you understand one technology that is used to perform the conversion. One simplified way to think about the sensor used in a digital camera (or camcorder) is to think of it as having a 2-D array of thousands or millions of tiny solar cells, each of which transforms the light from one small portion of the image into electrons. Both CCD and CMOS devices perform this task using a variety of technologies.
+-The next step is to read the value (accumulated charge) of each cell in the image. In a CCD device, the charge is actually transported across the chip and read at one corner of the array. An analog-to-digital converter turns each pixel's value into a digital value. In most CMOS devices, there are several transistors at each pixel that amplify and move the charge using more traditional wires. The CMOS approach is more flexible because each pixel can be read individually.
+-
+CCDs use a special manufacturing process to create the ability to transport charge across the chip without distortion. This process leads to very high-quality sensors in terms of fidelity and light sensitivity. CMOS chips, on the other hand, use traditional manufacturing processes to create the chip -- the same processes used to make most microprocessors. Because of the manufacturing differences, there have been some noticeable differences between CCD and CMOS sensors.
+-
+CCD sensors, as mentioned above, create high-quality, low-noise images. CMOS sensors, traditionally, are more susceptible to noise.
+Because each pixel on a CMOS sensor has several transistors located next to it, the light sensitivity of a CMOS chip tends to be lower. Many of the photons hitting the chip hit the transistors instead of the photodiode.
+CMOS traditionally consumes little power. Implementing a sensor in CMOS yields a low-power sensor.
+CCDs use a process that consumes lots of power. CCDs consume as much as 100 times more power than an equivalent CMOS sensor.
+CMOS chips can be fabricated on just about any standard silicon production line, so they tend to be extremely inexpensive compared to CCD sensors.
+CCD sensors have been mass produced for a longer period of time, so they are more mature. They tend to have higher quality and more pixels.
+-
+Based on these differences, you can see that CCDs tend to be used in cameras that focus on high-quality images with lots of pixels and excellent light sensitivity. CMOS sensors traditionally have lower quality, lower resolution and lower sensitivity. CMOS sensors are just now improving to the point where they reach near parity with CCD devices in some applications. CMOS cameras are usually less expensive and have great battery life.
