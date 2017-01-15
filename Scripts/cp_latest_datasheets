@@ -2,6 +2,7 @@
 cd "/media/tim/Game drive/Data_thesis/output/"
 dir_sets="datasets";
 dir_sheets="datasheets/raw_data";
+
 # for m in {efic,fbof,lobster,subsense,vibe}; do
 m=fbof
 for p in {wo,w}; do

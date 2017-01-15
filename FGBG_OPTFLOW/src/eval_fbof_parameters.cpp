@@ -27,6 +27,7 @@ const string P_MIN_VEC = "minVec";
 const string P_R_SN = "r_sn";
 const string P_T_SV = "t_sv";
 const string P_T_SN = "t_sn";
+const string P_R_MR = "r_mr";
 
 map<string, vector<float> > paramValues;
 
@@ -178,8 +179,9 @@ void *run (void* arg){
 
 				cout<< paramName << ": ";
 				cout<< paramVal <<io::SC_DELIM;
-				cout<< noiseStddev <<io::SC_DELIM;
+				cout<< ns <<io::SC_DELIM;
 				cout<< dsName <<io::SC_DELIM;
+				cout<< endl;
 
 				if(!d.hasGroundTruth()){
 					printAndLogln("Using dataset without GT : "+d.getName());
@@ -248,28 +250,32 @@ int main(){
 
 	/* Iterable algorithm parameters */
 	float minVecLen_axis = 1.0; // Minimum vector size along an axis, e.g. 1 will set threshold at length of vector (1,1)
-	float t_sv = 0.03; // similarity threshold for similar vector estimation: similarity if difference is below threshold
+	float t_sv = 0.05; // similarity threshold for similar vector estimation: similarity if difference is below threshold
 	short r_sn = 1; // Neighbour radius for similar neighbour weighting
-	float t_sn = 0.6; // percentage threshold for similar neighbour weights
+	float t_sn = 0.5; // percentage threshold for similar neighbour weights
 	short r_mr = 2; // radius of structuring element for dilation during morphological reconstruction
 
 	vector<float> values;
 
 	// values.clear();
-	// for(float v=1; v<=2; v+=1) values.push_back(v);
+	// for(float v=1; v<=5; v+=1) values.push_back(v);
 	// paramValues[P_MIN_VEC] = vector<float>(values);
 
 	// values.clear();
 	// for(float v=1; v<=3; v+=1) values.push_back(v);
 	// paramValues[P_R_SN] = vector<float>(values);
 
-	values.clear();
-	for(float v=0.01; v<=0.19; v+=0.02) values.push_back(v);
-	paramValues[P_T_SV] = vector<float>(values);
+	// values.clear();
+	// for(float v=0.01; v<=0.19; v+=0.02) values.push_back(v);
+	// paramValues[P_T_SV] = vector<float>(values);
 
 	// values.clear();
-	// for(float v=0.5; v<=1; v+=0.1) values.push_back(v);
+	// for(float v=0.1; v<1.1; v+=0.1) values.push_back(v);
 	// paramValues[P_T_SN] = vector<float>(values);
+
+	// values.clear();
+	// for(float v=1; v<=5; v+=1) values.push_back(v);
+	// paramValues[P_R_MR] = vector<float>(values);
 
 	for(auto itP=paramValues.begin();itP!=paramValues.end();itP++){
 

@@ -9,13 +9,13 @@ Hoofdopmerkingen presentatie 20-12-2016:
 TODO
 ----
 Datacalculatie:
--data verwerken in grafieken
++data verwerken in grafieken
 	-wat hoe tonen?
 		-ranking (bars) per methode
 			-per dataset (enkel bepaalde?)
 			-gemiddeld
--roc curves voor eigen parameters maken
-	-eval adaptatie: voor fbof met variërende parameters Recall en FPR berekenen
+-grafieken voor eigen parameters maken
+	+eval adaptatie: voor fbof met variërende parameters Recall en FPR berekenen
 		-verschillende iteraties doen: telkens kleinere precisie tot weinig variatie meer
 			-begin met 1 iteratie per parameter en zie of een parameter een andere beïnvloed
 	-roc curves maken adhv Recall en FPR (Wikipedia)
@@ -66,18 +66,10 @@ Boek:
 09/01
 -----
 -HDD intensieve taken:
-	-backup output noisy (bezig)
-	-efic output reorganiseren
-	-verwijderen output noisy
-	-verwijderen input noisy
-	-genereren nieuwe input noisy
-	-lobster,subsense en vibe eval(mot+calc) runnen
-	-efic eval(calc) runnen
+	-efic eval(calc) runnen (bezig)
 
 -app schrijven die poisson noise toevoegt >> Matlab (Windows installatie of Athena) >> J = imnoise(I,'poisson')
--fout noise fixen (HDD intensief)
 -roc curves fbof parameters
-	-reorg data
 	-grafieken maken
 -noise en probleem duiding in background
 	-noise beter uitschrijven (read & shot noise)

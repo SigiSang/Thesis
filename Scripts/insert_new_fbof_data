@@ -2,4 +2,4 @@
 cd "$(dirname "$0")"
 ./cp_latest_datasheets
 ./backup_fbof_data
-./reformat_data
+./split_data

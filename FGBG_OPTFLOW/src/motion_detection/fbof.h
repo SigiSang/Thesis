@@ -14,7 +14,7 @@ using namespace cv;
 class Fbof{
 public:
 	Fbof(){}
-	Fbof(string _name, float _minVecLen_axis=1.0, short _r_sn=1, float _t_sv=0.03, float _t_sn=0.6, short _r_mr=2,bool _showResults=false,bool _useDenoising=false):
+	Fbof(string _name, float _minVecLen_axis=1.0, short _r_sn=1, float _t_sv=0.03, float _t_sn=0.5, short _r_mr=2,bool _showResults=false,bool _useDenoising=false):
 		name(_name),minVecLen_axis(_minVecLen_axis),r_sn(_r_sn),t_sv(_t_sv),t_sn(_t_sn),r_mr(_r_mr),showResults(_showResults),useDenoising(_useDenoising)
 		{ init(); }
 	~Fbof(){}
@@ -158,8 +158,8 @@ void Fbof::opticalFlow(const Mat& prvFr, const Mat& nxtFr, vector<uchar>& status
 		int levels = 1;
 		int winsize = 15; // Larger window size is more robust to noise, too large can give faulty results?
 		int iterations = 3;
-		// int poly_n = 5; double poly_sigma = 1.1;
-		int poly_n = 7; double poly_sigma = 1.5;
+		int poly_n = 5; double poly_sigma = 1.1;
+		// int poly_n = 7; double poly_sigma = 1.5;
 		int flags = 0;
 
 		calcOpticalFlowFarneback(prvFrGrey,nxtFrGrey,flow,pyr_scale,levels,winsize,iterations,poly_n,poly_sigma,flags);
@@ -525,9 +525,9 @@ void Fbof::motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motion
 		// opticalFlow(prvFr,nxtFr,status,prvPts,nxtPts,fgMask,flowFarneback); // switch prvFr & nxtFr
 		opticalFlow(nxtFr,prvFr,status,prvPts,nxtPts,fgMask,flowFarneback);
 
-			// Optical flow regularization
-			// optFlowRegularization(prvFr.size(),motCompMask,maskReg,status,prvPts,nxtPts,weights,data,maskRegEntireFrame);
-			optFlowRegularization(prvFr.size(),fgMask,maskReg,status,prvPts,nxtPts,weights,data,maskRegEntireFrame);
+		// Optical flow regularization
+		// optFlowRegularization(prvFr.size(),motCompMask,maskReg,status,prvPts,nxtPts,weights,data,maskRegEntireFrame);
+		optFlowRegularization(prvFr.size(),fgMask,maskReg,status,prvPts,nxtPts,weights,data,maskRegEntireFrame);
 
 		if(!hasHighValue(maskReg)){
 			fgMask.copyTo(motionMask);

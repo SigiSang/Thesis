@@ -23,27 +23,27 @@ ofstream osLog;
 
 /** Initialise iteration parameters **/
 vector<string> lMd = {
-	// FBOF
-	LOBSTER // done
+	FBOF
+	// ,LOBSTER // done
 	// ,PAWCS
-	,SUBSENSE // done
-	,VIBE // done
-	// ,EFIC
+	// ,SUBSENSE // done
+	// ,VIBE // done
+	// ,EFIC // done
 };
 vector<int> lDs = { // Dataset IDs
-	 ds::CD_BRIDGE_ENTRY
-	,ds::CD_BUSY_BOULEVARD
-	,ds::CD_FLUID_HIGHWAY
+	//  ds::CD_BRIDGE_ENTRY
+	// ,ds::CD_BUSY_BOULEVARD
+	ds::CD_FLUID_HIGHWAY
 	,ds::CD_STREETCORNER
 	,ds::CD_TRAMSTATION
 	,ds::CD_WINTERSTREET
 };
-vector<bool> lPp = {false,true}; // Post-processing
-// vector<bool> lPp = {true}; // Post-processing
+vector<bool> lPp = {true};
+// vector<bool> lPp = {false,true}; // Post-processing
 
 /** Static parameters **/
 bool grayscale = true;
-bool runMotionDetection = false;
+bool runMotionDetection = true;
 bool runCalculateScores = true;
 
 struct thread_data{
@@ -113,7 +113,7 @@ void *run (void* arg){
 	ss.str("");	ss<<"Go for "<<threadIdx;	printAndLogln(ss.str());
 
 	MotionDetection* m;
-	loadMotionDetection(m,mdName);
+	if(mdName!=EFIC) loadMotionDetection(m,mdName);
 	ds::Dataset d;
 	ds::loadDataset(d,DS_ID,grayscale,noiseStddev);
 
@@ -134,7 +134,6 @@ void *run (void* arg){
 
 	if( runMotionDetection && (mdName==FBOF || !io::isDirExist(io::DIR_OUTPUT+pathImgs)) ){
 		printAndLogln("Running motion detection for: "+pathImgs);
-		// io::clearOutput(pathImgs);
 		for(; d.hasNext(); idx++){
 			d.next(frame,gt);
 			m->next(frame,motionMask,applyPostProcessing);
@@ -170,7 +169,7 @@ int main(){
 
 	for(int mdIdx=0;mdIdx<lMd.size();mdIdx++){
 	for(int dsIdx=0;dsIdx<lDs.size();dsIdx++){
-	// for(int ns=NOISE_STDDEV_MIN;ns<=NOISE_STDDEV_MIN;ns+=NOISE_STDDEV_INC){
+	// for(int ns=30;ns<=NOISE_STDDEV_MAX;ns+=NOISE_STDDEV_INC){
 	for(int ns=NOISE_STDDEV_MIN;ns<=NOISE_STDDEV_MAX;ns+=NOISE_STDDEV_INC){
 	for(int ppIdx=0;ppIdx<lPp.size();ppIdx++){
 

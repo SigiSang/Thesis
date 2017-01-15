@@ -111,15 +111,15 @@ namespace ds{
 				throw;
 			}
 
-			string pattern=io::DIR_OUTPUT+pathScores+dsName+"*.csv";
-			glob_t glob_result;
-			int ret = glob(pattern.c_str(),GLOB_PERIOD,NULL,&glob_result);
-			if(glob_result.gl_pathc>0){
-				cout<<"Skipping                      "<<pathScores+dsName<<endl;
-				globfree(&glob_result);
-				return;
-			}
-			globfree(&glob_result);
+			// string pattern=io::DIR_OUTPUT+pathScores+dsName+"*.csv";
+			// glob_t glob_result;
+			// int ret = glob(pattern.c_str(),GLOB_PERIOD,NULL,&glob_result);
+			// if(glob_result.gl_pathc>0){
+			// 	cout<<"Skipping                      "<<pathScores+dsName<<endl;
+			// 	globfree(&glob_result);
+			// 	return;
+			// }
+			// globfree(&glob_result);
 
 			VideoCapture vcOutput(io::DIR_OUTPUT+pathImgs+io::REGEX_IMG_OUTPUT);
 
