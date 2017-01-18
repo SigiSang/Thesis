@@ -14,7 +14,7 @@ using namespace cv;
 class Fbof{
 public:
 	Fbof(){}
-	Fbof(string _name, float _minVecLen_axis=1.0, short _r_sn=1, float _t_sv=0.03, float _t_sn=0.5, short _r_mr=2,bool _showResults=false,bool _useDenoising=false):
+	Fbof(string _name, float _minVecLen_axis=1.0, short _r_sn=1, float _t_sv=0.03, double _t_sn=0.375, short _r_mr=2,bool _showResults=false,bool _useDenoising=false):
 		name(_name),minVecLen_axis(_minVecLen_axis),r_sn(_r_sn),t_sv(_t_sv),t_sn(_t_sn),r_mr(_r_mr),showResults(_showResults),useDenoising(_useDenoising)
 		{ init(); }
 	~Fbof(){}
@@ -158,8 +158,8 @@ void Fbof::opticalFlow(const Mat& prvFr, const Mat& nxtFr, vector<uchar>& status
 		int levels = 1;
 		int winsize = 15; // Larger window size is more robust to noise, too large can give faulty results?
 		int iterations = 3;
-		int poly_n = 5; double poly_sigma = 1.1;
-		// int poly_n = 7; double poly_sigma = 1.5;
+		// int poly_n = 5; double poly_sigma = 1.1;
+		int poly_n = 7; double poly_sigma = 1.5;
 		int flags = 0;
 
 		calcOpticalFlowFarneback(prvFrGrey,nxtFrGrey,flow,pyr_scale,levels,winsize,iterations,poly_n,poly_sigma,flags);
@@ -289,10 +289,9 @@ void Fbof::optFlowRegularization(const Size& size, const Mat& fgMask, Mat& dst, 
    	/**/
 }
 
-/* Main difference in result with morphological reconstruction:
-* the implemented MR used a circuler structuring element,
-* while this method searches withing a window around a pixel
-* (pixel at the center, window is square with edge size = 2r+1 for a set radius r)
+/*
+Two-part alternative implementation for morphological reconstruction
+@see expandMarker
 */
 void Fbof::expandByList(const Mat& data, const Mat& mask, Mat& marker, vector<bool>& expanded, vector<int> toExpand){
     const int width=mask.cols, height=mask.rows, r=r_mr;
@@ -325,25 +324,14 @@ void Fbof::expandByList(const Mat& data, const Mat& mask, Mat& marker, vector<bo
 			}
     	}
 	}
-	// for(int i=0; i<toExpand.size();i++){
- //    	int idx = toExpand[i];
- //    	if(!expanded[idx]){
- //    		expanded[idx] = true;
- //    		marker.at<uchar>(idx)=(uchar)(-1); // Max value
-	// 		for(int i=-r; i<=r; i++){
-	// 		for(int j=-r; j<=r; j++){
-	// 			int idxNb = idx+j*width+i;
-	// 			if(idxNb != idx && idxNb>0 && idxNb < width*height){
-	// 				if( (short)(mask.at<uchar>(idxNb))>0){
-	// 					toExpand.push_back(idxNb);
-	// 				}
-	// 			}
-	// 		}
-	// 		}
- //    	}
-	// }
 }
 
+/*
+Alternative implementation for morphological reconstruction to be less redundant.
+Iterates all pixels in the mask, expands all high valued pixels of 'marker'.
+expandByList() iterates all pixels in 'toExpand', sets their value in 'marker' to high and iterates all connecting pixels, adds them to 'toExpand' if high-valued in 'mask'.
+Boolean array 'expanded' keeps track of all expanded pixels, so that each pixel is processed at most once.
+*/
 void Fbof::expandMarker(const Mat& data, const Mat& mask, const Mat& marker, Mat& dst){
     const int width=mask.cols, height=mask.rows;
     marker.copyTo(dst);

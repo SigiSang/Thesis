@@ -30,7 +30,7 @@ my %param_no_lns = (
 	 minVec => 5
 	,r_sn => 3
 	,t_sv => 10
-	,t_sn => 10
+	,t_sn => 8
 	,r_mr => 5
 );
 
