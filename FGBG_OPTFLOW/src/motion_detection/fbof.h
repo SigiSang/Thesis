@@ -468,11 +468,18 @@ void Fbof::postProcessing(Mat& img){
    	int sizeMorph = 9;
    	/* Large closing */
    	int sizeMedBlur = 3;
-   	int sizeMorph = 21;
+   	int sizeMorph = 7;
    	/**/
 	Mat struc = getStructuringElement(MORPH_ELLIPSE,Size(sizeMorph,sizeMorph));
-   	medianBlur(img,img,sizeMedBlur);
-	morphologyEx(img,img,MORPH_CLOSE,struc);
+   	// medianBlur(img,img,sizeMedBlur);
+   	// medianBlur(img,img,sizeMedBlur);
+   	dilate(img,img,struc);
+   	dilate(img,img,struc);
+   	dilate(img,img,struc);
+   	erode(img,img,struc);
+   	erode(img,img,struc);
+   	erode(img,img,struc);
+	// morphologyEx(img,img,MORPH_CLOSE,struc);
 	// morphologyEx(img,img,MORPH_OPEN,struc);
 	// morphologyEx(img,img,MORPH_CLOSE,struc);
 }

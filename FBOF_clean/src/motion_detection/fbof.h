@@ -318,15 +318,19 @@ void Fbof::applyMotion(const Mat& src, const Mat& regulData, Mat& dst){
 
 /*
 Performs post-processing:
--median filter with a 3x3 window
--morphological closing with a 21x21 circular structuring element
+-three times dilation followed by three times erosion with a 7x7 circular structuring element
 */
 void Fbof::postProcessing(Mat& img){
    	int sizeMedBlur = 3;
-   	int sizeMorph = 21;
+   	int sizeMorph = 7;
 	Mat struc = getStructuringElement(MORPH_ELLIPSE,Size(sizeMorph,sizeMorph));
    	medianBlur(img,img,sizeMedBlur);
-	morphologyEx(img,img,MORPH_CLOSE,struc);
+   	medianBlur(img,img,sizeMedBlur);
+   	dilate(img,img,struc);
+   	dilate(img,img,struc);
+   	dilate(img,img,struc);
+   	erode(img,img,struc);
+   	erode(img,img,struc);
 }
 
 void Fbof::motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motionMask, bool usePostProcessing, bool onlyUpdateBGModel=false, bool useRegExpansion=true){

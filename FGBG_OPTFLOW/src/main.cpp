@@ -30,8 +30,8 @@ int main (int argc, char** argv){
 	// const int VID_ID = ds::CD_BRIDGE_ENTRY , skipToFrame = 0;
 	// const int VID_ID = ds::CD_BUSY_BOULEVARD , skipToFrame = 745/;
 	// const int VID_ID = ds::CD_STREETCORNER , skipToFrame = 80; // 865;
-	const int VID_ID = ds::CD_TRAMSTATION, skipToFrame = 30;
-	// const int VID_ID = ds::CD_TRAMSTATION, skipToFrame = 590;
+	// const int VID_ID = ds::CD_TRAMSTATION, skipToFrame = 30;
+	const int VID_ID = ds::CD_TRAMSTATION, skipToFrame = 585;
 	// const int VID_ID = ds::CD_WINTERSTREET, skipToFrame = 0;
 	// const int VID_ID = ds::AVSS_SHORT, skipToFrame = 0;
 	// const int VID_ID = ds::MISC_3, skipToFrame = 200;
