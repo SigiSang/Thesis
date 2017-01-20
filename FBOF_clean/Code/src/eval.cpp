@@ -1,3 +1,10 @@
+/*
+
+This code was written by Tim Ranson for the master's dissertation 'Noise-robust motion detection for low-light videos' by Tim Ranson.
+
+*/
+
+
 #include <chrono>
 #include <iomanip>
 #include <pthread.h>
@@ -18,17 +25,17 @@ using std::queue;
 /** Multithreading helpers **/
 const int MAX_THREADS = 5;
 queue<int> isAvailable;
-#define EVAL_MULTITHREADING
+/* If defined, multithreading will be used. */
+// #define EVAL_MULTITHREADING
 ofstream osLog;
 
 /** Initialise iteration parameters **/
 vector<string> lMd = {
 	FBOF
-	// ,LOBSTER // done
-	// ,PAWCS
-	// ,SUBSENSE // done
-	// ,VIBE // done
-	// ,EFIC // done
+	,LOBSTER
+	,SUBSENSE
+	,VIBE
+	,EFIC
 };
 vector<int> lDs = { // Dataset IDs
 	 ds::CD_BRIDGE_ENTRY

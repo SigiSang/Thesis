@@ -1,3 +1,10 @@
+/*
+
+This code was written by Tim Ranson for the master's dissertation 'Noise-robust motion detection for low-light videos' by Tim Ranson.
+
+*/
+
+
 #ifndef _FSCORES
 #define _FSCORES
 

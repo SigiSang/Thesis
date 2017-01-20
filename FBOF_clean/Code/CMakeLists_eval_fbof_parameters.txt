@@ -1,0 +1,32 @@
+cmake_minimum_required( VERSION 3.1 )
+project( eval_fbof_parameters )
+
+set( dir_src src )
+set( dir_src_md ${dir_src}/motion_detection )
+set( dir_src_stcharles ${dir_src_md}/St-Charles )
+set( dir_src_vibe ${dir_src_md}/ViBe )
+#set( dir_src_kde ${dir_src_md}/KDE )
+#set( dir_src_zloko ${dir_src}/Zlokolica )
+
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+
+file( GLOB_RECURSE headers ${dir_src}/*.h )
+file( GLOB_RECURSE sources
+	${dir_src}/eval_fbof_parameters.cpp
+	${dir_src_md}/*.cpp
+	${dir_src_md}/*.t
+)
+
+include_directories( ${dir_src} )
+include_directories( ${dir_src_md} )
+include_directories( ${dir_src_stcharles} )
+include_directories( ${dir_src_vibe} )
+include_directories( ${dir_src}/headers )
+#include_directories( ${dir_src_kde} )
+#include_directories( ${dir_src_zloko} )
+
+find_package( OpenCV REQUIRED )
+find_package( Threads REQUIRED )
+add_executable( eval_fbof_parameters ${headers} ${sources} )
+target_link_libraries( eval_fbof_parameters ${OpenCV_LIBS} Threads::Threads )
+target_compile_options( eval_fbof_parameters PUBLIC -std=c++11 )

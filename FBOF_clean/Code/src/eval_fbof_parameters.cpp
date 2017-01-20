@@ -1,3 +1,10 @@
+/*
+
+This code was written by Tim Ranson for the master's dissertation 'Noise-robust motion detection for low-light videos' by Tim Ranson.
+
+*/
+
+
 #include <chrono>
 #include <iomanip>
 #include <pthread.h>
@@ -20,7 +27,8 @@ using std::queue;
 /** Multithreading helpers **/
 const int MAX_THREADS = 5;
 queue<int> isAvailable;
-#define EVAL_MULTITHREADING
+/* If defined, multithreading will be used. */
+// #define EVAL_MULTITHREADING
 ofstream osLog;
 
 const string P_MIN_VEC = "minVec";
@@ -34,11 +42,11 @@ map<string, vector<double> > paramValues;
 /** Initialise iteration parameters **/
 const vector<int> lDs = { // Dataset IDs
 	 ds::CD_BRIDGE_ENTRY
-	// ,ds::CD_BUSY_BOULEVARD
-	// ,ds::CD_FLUID_HIGHWAY
+	,ds::CD_BUSY_BOULEVARD
+	,ds::CD_FLUID_HIGHWAY
 	,ds::CD_STREETCORNER
 	,ds::CD_TRAMSTATION
-	// ,ds::CD_WINTERSTREET
+	,ds::CD_WINTERSTREET
 };
 
 map<int,int> temporalROIs; // For each dataset, index of ROI starting frame
@@ -266,9 +274,9 @@ int main(){
 	// for(double v=1; v<=3; v+=1) values.push_back(v);
 	// paramValues[P_R_SN] = vector<double>(values);
 
-	// values.clear();
-	// for(double v=0.02; v<=0.38; v+=0.04) values.push_back(v);
-	// paramValues[P_T_SV] = vector<double>(values);
+	values.clear();
+	for(double v=0.01; v<=0.19; v+=0.02) values.push_back(v);
+	paramValues[P_T_SV] = vector<double>(values);
 
 	values.clear();
 	for(double v=0.125; v<1.1; v+=0.125) values.push_back(v);

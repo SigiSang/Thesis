@@ -1,3 +1,10 @@
+/*
+
+This code was written by Tim Ranson for the master's dissertation 'Noise-robust motion detection for low-light videos' by Tim Ranson.
+
+*/
+
+
 #ifndef _IO
 #define _IO
 
@@ -23,9 +30,9 @@ using namespace cv;
 
 namespace io {
 
-	/** Directories **/
-	const string DIR_INPUT = "/media/tim/Game drive/Data_thesis/input/";
-	const string DIR_OUTPUT = "/media/tim/Game drive/Data_thesis/output/";
+	/** Directories used for IO operations **/
+	const string DIR_INPUT = "input/";
+	const string DIR_OUTPUT = "output/";
 	const string DIR_EVAL_FBOF_PARAMS = "datasheets/eval_fbof_parameters/";
 
 	/** Constants for Scores IO **/

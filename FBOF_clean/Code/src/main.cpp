@@ -1,3 +1,10 @@
+/*
+
+This code was written by Tim Ranson for the master's dissertation 'Noise-robust motion detection for low-light videos' by Tim Ranson.
+
+*/
+
+
 #include <string>
 using std::string;
 #include <iostream>
@@ -58,7 +65,7 @@ int main (int argc, char** argv){
 	bool useDenoising = false;
 
 	bool showSrc = true;
-	/**/
+	/* Switches to run the algorithm on the original input and/or with added noise */
 	bool withOriginal = false;
 	bool withNoisy = true;
 	/**

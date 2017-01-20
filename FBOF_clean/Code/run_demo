@@ -1,4 +1,4 @@
 #!/bin/bash
-project=eval
+project=demo
 cp -f CMakeLists_$project.txt CMakeLists.txt
-openCvCmake $project && ./$project
+./openCvCmake.sh $project && ./$project

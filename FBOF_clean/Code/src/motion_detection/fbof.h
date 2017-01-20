@@ -1,3 +1,10 @@
+/*
+
+This code was written by Tim Ranson for the master's dissertation 'Noise-robust motion detection for low-light videos' by Tim Ranson.
+
+*/
+
+
 #ifndef _FBOF
 #define _FBOF
 
@@ -43,16 +50,13 @@ protected:
 	uchar t_sn_converted; 
 
 	void init();
-	void checkRegulData(const Mat& mask, const Mat& regulData);
 	void denoise(const Mat& src, Mat& dst);
 	void backgroundSubtraction(const Mat& frame, Mat& fgMask, Ptr<BackgroundSubtractor> pMOG2);
 	void getOptFlowFeatures(const Mat& motCompMask, const Mat& fgMask, Mat& combinedMask, vector<Point2f>& goodFeaturesToTrack, bool useForegroundFeatures);
 	void opticalFlow(const Mat& prvFr, const Mat& nxtFr, vector<uchar>& status, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& fgMask, Mat& flow);
 	bool similarVectorEstimation(const DataVec& data1, const DataVec& data2);
 	void similarNeighbourWeighting(const Mat& data, Mat& weights);
-	void optFlowRegularization(const Size& size, const Mat& fgMask, Mat& dst, vector<uchar>& status, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& weights, Mat& data, Mat& weightsEntireFrameMask);
-	void expandByList(const Mat& data, const Mat& mask, Mat& marker, vector<bool>& expanded, vector<int> toExpand);
-	void expandMarker(const Mat& data, const Mat& mask, const Mat& marker, Mat& dst);
+	void optFlowRegularization(const Size& size, const Mat& fgMask, Mat& dst, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& weights, Mat& data);
 	void morphologicalReconstruction(const Mat& mask, const Mat& marker, Mat& dst);
 	void regularizeDataByList(const Mat& mask, vector<bool>& expanded, vector<int> toExpand, Mat& regulData, DataVecType deltaX, DataVecType deltaY);
 	void regularizeData(const Mat& marker, const Mat& mask, const Mat& data, Mat& regulData);
@@ -75,30 +79,24 @@ void Fbof::init(){
 	pMOG2 = createBackgroundSubtractorMOG2(history,varThreshold,detectShadows);
 }
 
-void Fbof::checkRegulData(const Mat& mask, const Mat& regulData){
-	Mat regulMask = Mat::zeros(mask.size(),mask.type()); // will get high values if pixel is sourcepoint for motion vector in regulData
-    const int width=mask.cols, height=mask.rows;
-    for(int x=0;x<width;x++){
-    for(int y=0;y<height;y++){
-    	DataVec dv = regulData.at<DataVec>(y*width+x); // relative motion vector representation
-    	if(dv[1]!=0 || dv[2]!=0){ // relative motion vector is non-zero
-    		regulMask.at<uchar>(y,x) = -1;
-    	}
-    }
-    }
-    cout<<"Mask vs RegulMask ";
-    io::printScores(mask,regulMask);
-    io::showMaskOverlap(mask,"Mask",regulMask,"RegulMask");
-}
-
+/*
+Perform Non-local means denoising
+*/
 void Fbof::denoise(const Mat& src, Mat& dst){
 	dn::denoise(src,dst,dn::DEN_NL_MEANS);
 }
 
+/*
+Background subtraction using OpenCV implementation cv::BackgroundSubtractorMOG2 of Zivkovic's adaptation of Gaussian Mixture Model
+*/
 void Fbof::backgroundSubtraction(const Mat& frame, Mat& fgMask, Ptr<BackgroundSubtractor> pMOG2){
 	double learningRate = -1;
     pMOG2->apply(frame, fgMask,learningRate);
 }
+
+/*
+Optical flow using OpenCV implementation of Farneback's method
+*/
 void Fbof::opticalFlow(const Mat& prvFr, const Mat& nxtFr, vector<uchar>& status, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& fgMask, Mat& flow){
 	Mat prvFrGrey, nxtFrGrey;
 	prvFr.copyTo(prvFrGrey);
@@ -143,6 +141,10 @@ void Fbof::opticalFlow(const Mat& prvFr, const Mat& nxtFr, vector<uchar>& status
 	merge(mv,flow);
 }
 
+
+/*
+Similar neighbour estimation as described in master's dissertation
+*/
 bool Fbof::similarVectorEstimation(const DataVec& dataVec1, const DataVec& dataVec2){
 	DataVecType deltaX1 = dataVec1[1];
 	DataVecType deltaY1 = dataVec1[2];
@@ -158,6 +160,9 @@ bool Fbof::similarVectorEstimation(const DataVec& dataVec1, const DataVec& dataV
 	return ( dLengthSquared/v1LengthSquared < t_sv_squared );
 }
 
+/*
+Similar neighbour weighting as described in master's dissertation
+*/
 void Fbof::similarNeighbourWeighting(const Mat& data, Mat& weights){
 	for(int x=0;x<data.cols;x++){
 	for(int y=0;y<data.rows;y++){
@@ -190,7 +195,7 @@ Performs optical flow regularisation, resulting in the regularised motion mask s
 Starts by converting the optical flow data in 'prvPts' and 'nxtPts' to a different format and removing small vector simultaneously (replaced by zero-vector).
 Similar neighbour weighting is performed on the optical flow data and finally thresholds the similar neighbour weights, result is stored in 'dst'.
 */
-void Fbof::optFlowRegularization(const Size& size, const Mat& fgMask, Mat& dst, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& weights, Mat& data, Mat& weightsEntireFrameMask){
+void Fbof::optFlowRegularization(const Size& size, const Mat& fgMask, Mat& dst, vector<Point2f>& prvPts, vector<Point2f>& nxtPts, Mat& weights, Mat& data){
 
 	if(std::is_same<DataVecType,short>::value){
     	data = Mat::zeros(size,CV_16SC3);
@@ -198,7 +203,6 @@ void Fbof::optFlowRegularization(const Size& size, const Mat& fgMask, Mat& dst, 
     	data = Mat::zeros(size,CV_32FC3);
     }
 	weights = Mat::zeros(size,CV_32FC1);
-	Mat weightsEntireFrame = Mat::zeros(size,CV_32FC1);
 
 	/* Optical flow data reformatting */
     for(int ptsIdx=0;ptsIdx<prvPts.size();ptsIdx++){
@@ -210,6 +214,11 @@ void Fbof::optFlowRegularization(const Size& size, const Mat& fgMask, Mat& dst, 
 		if(vectorLengthSquared(deltaX,deltaY) < minVecLenSquared){
 			deltaX = 0;
 			deltaY = 0;
+		}
+		if(fgMask.at<uchar>(srcPt) > 0){
+			data.at<DataVec>(srcPt)[0] = ptsIdx;
+			data.at<DataVec>(srcPt)[1] = deltaX;
+			data.at<DataVec>(srcPt)[2] = deltaY;
 		}
     }
 
@@ -293,7 +302,6 @@ void Fbof::regularizeData(const Mat& marker, const Mat& mask, const Mat& data, M
 	    }
     }
     }
-    checkRegulData(mask,regulData);
 }
 
 /*
@@ -358,7 +366,7 @@ void Fbof::motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motion
 		opticalFlow(nxtFr,prvFr,status,prvPts,nxtPts,fgMask,flowFarneback);
 
 		/* Optical flow regularization */
-		optFlowRegularization(prvFr.size(),fgMask,maskReg,status,prvPts,nxtPts,weights,data);
+		optFlowRegularization(prvFr.size(),fgMask,maskReg,prvPts,nxtPts,weights,data);
 
 		if(!hasHighValue(maskReg)){ // If the regularised mask is empty (only low values), use the foreground mask for motion mask and skip morphological reconstruction
 			fgMask.copyTo(motionMask);
@@ -367,7 +375,7 @@ void Fbof::motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motion
 			/* The regularised mask is the marker for morphological reconstruction */
 			maskReg.copyTo(morphRecMarker);
 
-			/* Combination of the foreground mask and regularised mask is the mask for  */morphological reconstruction
+			/* Combination of the foreground mask and regularised mask is the mask for  morphological reconstruction */
 			bitwise_or(fgMask,maskReg,morphRecMask);
 
 		   	/* Morphological reconstruction */
@@ -393,7 +401,7 @@ void Fbof::motionDetection(Mat& prvFr, Mat& nxtFr, Mat& motCompMask, Mat& motion
 			bool resize = true;
 			io::showImage(name+" Source",nxtFr,resize,saveResults);
 			if(useDenoising) io::showImage(name+" Denoised",nxtFrDenoised,resize,saveResults);
-			if(!fgMask.empty()) io::showImage(name+" Foreground Mask"r_mr,fgMask,resize,saveResults);
+			if(!fgMask.empty()) io::showImage(name+" Foreground Mask",fgMask,resize,saveResults);
 			if(!flowFarneback.empty()) io::showImage(name+" Farneback",flowFarneback,resize,saveResults);
 			if(!weights.empty()) io::showImage(name+" Weights",weights,resize,saveResults);
 			if(!maskReg.empty()) io::showImage(name+" Weights thresholded",maskReg,resize,saveResults);
